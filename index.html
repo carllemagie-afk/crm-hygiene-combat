@@ -301,6 +301,11 @@
   .etapes-mini li.courant { color: var(--texte); font-weight: 600; }
   .etapes-mini li.courant .pt { background: var(--ardoise-700); color: #fff; border-color: var(--ardoise-700); box-shadow: 0 0 0 4px var(--acier-100); }
 
+  .tache[data-tache-ouvrir] { cursor: pointer; } .tache[data-tache-ouvrir]:hover { background: var(--acier-50); }
+  .bandeau-tache { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; margin-bottom: 14px; border-radius: var(--r);
+    background: var(--attention-50); border: 1px solid #ecd3a8; }
+  .bandeau-tache .quoi { flex: 1; min-width: 200px; } .bandeau-tache .quoi b { display: block; } .bandeau-tache .quoi span { font-size: 12.5px; color: var(--doux); }
+  .bandeau-tache .rangee { gap: 8px; }
   .tache { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-bottom: 1px solid var(--trait); transition: background var(--vite), opacity var(--doucement); animation: entree var(--doucement) both; animation-delay: calc(var(--n, 0) * 14ms); }
   .tache:last-child { border-bottom: 0; }
   .tache:hover { background: var(--acier-50); }
@@ -581,7 +586,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.25-2344';
+const VERSION_APP = '2026.10.25-2356';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1056,6 +1061,7 @@ function menuPlus() {
 
 function aller(page, id) {
   document.body.classList.remove('sans-anim');
+  if (page !== 'fiche') S.tacheEnCours = null;
   if (page === 'sequence' || S.page === 'sequence') S.brouillonSeq = null;
   S.page = page;
   S.id = id || null;
@@ -1358,6 +1364,7 @@ function pageFiche() {
 
   $('#page').innerHTML = '<div class="page">' +
     '<div class="fil"><a href="#" id="retour">' + ico('retour') + 'Clients</a><span class="pale">/</span><span>' + esc(nomClient(c)) + '</span></div>' +
+    bandeauTache(c) +
     '<div class="segment fiche-onglets">' + [['infos', 'Infos'], ['activite', 'Activité'], ['suivi', 'Suivi']].map(([k, n]) =>
       '<button data-onglet="' + k + '" class="' + (S.ongletFiche === k ? 'actif' : '') + '">' + n + '</button>').join('') + '</div>' +
     '<div class="fiche">' +
@@ -1421,6 +1428,7 @@ function pageFiche() {
   $('#aTache').onclick = () => fenetreTache({ ClientID: c.ID });
   $('#aRdv').onclick = () => fenetreRdv(c);
   $('#aComp').onclick = () => ouvrirComparateur(c);
+  brancherBandeauTache(c);
   brancherComparatifs(c);
   $('#ajoutChamp').onclick = () => demanderTexte('Nouveau champ', 'Nom du champ (visible sur toutes les fiches)', 'Ex. : Nombre d’adhérents').then(nom =>
     appel('crmAjouterChamp', nom).then(ch => { S.d.champs = ch; pageFiche(); toast('Champ « ' + nom + ' » ajouté'); }));
@@ -1725,7 +1733,7 @@ function fenetreAppel(c, tache) {
     if (Object.keys(changes).length) etapes.push(appel('crmEnregistrerClient', c.ID, changes).then(x => majClient(x)));
     if (f.$('#apRappel').checked) etapes.push(appel('crmTache', { clientId: c.ID, type: 'Appel', titre: 'Rappeler ' + (c['Prénom'] || nomClient(c)),
       echeance: versIso(f.$('#apDate').value, f.$('#apHeure').value), owner: c.Owner || S.moi, rappel: true }).then(r => { S.d.taches.push(r.tache); if (r.avertissement) toast(r.avertissement, true); }));
-    if (tache) etapes.push(appel('crmTacheFaite', tache.ID, true).then(t => remplacer(S.d.taches, t)));
+    if (tache) etapes.push(appel('crmTacheFaite', tache.ID, true).then(t => { remplacer(S.d.taches, t); if (S.tacheEnCours === t.ID) S.tacheEnCours = null; }));
     occupe(f.$('#apOk'), Promise.all(etapes)).then(() => { f.fermer(); afficher(); toast('Appel enregistré'); });
   };
 }
@@ -1753,7 +1761,7 @@ function optionsModeles(choisi) {
     S.d.modeles.filter(m => (m['Catégorie'] || 'Divers') === cat).map(m => '<option value="' + m.ID + '"' + (m.ID === choisi ? ' selected' : '') + '>' + esc(m.Nom) + '</option>').join('') + '</optgroup>').join('');
 }
 
-function fenetreEmail(c) {
+function fenetreEmail(c, apresEnvoi) {
   if (!c.Email) return toast('Ajoutez d’abord une adresse e-mail sur la fiche', true);
   const owner = c.Owner || S.moi;
   const f = fenetre({ titre: 'Nouvel e-mail', large: true, corps:
@@ -1788,6 +1796,7 @@ function fenetreEmail(c) {
     if (!objet || !corps) return toast('Indiquez un objet et un message', true);
     occupe(f.$('#emOk'), appel('crmEnvoyerEmail', { clientId: c.ID, objet, corps, owner: f.$('#emOwner').value })).then(r => {
       S.d.activites.push(r.activite); S.d.envoisAujourdhui++; f.fermer(); afficher(); toast('E-mail envoyé à ' + c.Email);
+      if (apresEnvoi) apresEnvoi();
     });
   };
 }
@@ -2054,7 +2063,7 @@ function ligneTache(t, n, compact) {
   const ech = t['Échéance'] ? new Date(t['Échéance']) : null;
   const enRetard = ech && !t.Faite && ech < new Date();
   const appelTel = t.Type === 'Appel' && c && telNettoye(c['Téléphone']);
-  return '<div class="tache' + (t.Faite ? ' faite' : '') + '" style="--n:' + Math.min(n || 0, 25) + '"><input type="checkbox" class="case ronde" data-faite="' + t.ID + '"' + (t.Faite ? ' checked' : '') + ' aria-label="Terminée">' +
+  return '<div class="tache' + (t.Faite ? ' faite' : '') + '"' + (c ? ' data-tache-ouvrir="' + t.ID + '" title="Ouvrir la fiche de ' + esc(nomClient(c)) + '"' : '') + ' style="--n:' + Math.min(n || 0, 25) + '"><input type="checkbox" class="case ronde" data-faite="' + t.ID + '"' + (t.Faite ? ' checked' : '') + ' aria-label="Terminée">' +
     '<span class="type">' + ico(t.Type === 'Appel' ? 'tel' : 'tache') + '</span>' +
     '<div class="corps"><b>' + esc(t.Titre) + '</b><div class="sous">' +
       (ech ? '<span class="' + (enRetard ? 'retard' : '') + '">' + esc(relatif(t['Échéance'])) + '</span>' : '<span>Sans date</span>') +
@@ -2066,13 +2075,42 @@ function ligneTache(t, n, compact) {
     '<button class="btn fantome icone" data-modif="' + t.ID + '" aria-label="Modifier">' + ico('crayon') + '</button></div>';
 }
 
+/** Ouvre la fiche du client d'une tâche ; la tâche s'affiche en haut de la fiche avec le bouton pour la faire. */
+function ouvrirTache(tacheId, clientId) {
+  const t = S.d.taches.find(x => x.ID === tacheId);
+  S.tacheEnCours = t && !t.Faite ? t.ID : null;
+  aller('fiche', clientId || (t && t.ClientID));
+}
+
+/** Bandeau « Tâche à faire » en haut de la fiche : appeler, répondre par e-mail, comparatif… puis la tâche est marquée faite. */
+function bandeauTache(c) {
+  const t = S.tacheEnCours && S.d.taches.find(x => x.ID === S.tacheEnCours && x.ClientID === c.ID && !x.Faite);
+  if (!t) return '';
+  const action = t.Type === 'Appel' ? ['tel', 'Appeler'] : /^Répondre/.test(t.Titre) ? ['mail', 'Répondre par e-mail'] : /^Comparatif/.test(t.Titre) ? ['comparer', 'Faire le comparatif'] : null;
+  return '<div class="bandeau-tache">' + ico(t.Type === 'Appel' ? 'tel' : 'tache') + '<div class="quoi"><b>' + esc(t.Titre) + '</b><span>' +
+    (t['Échéance'] ? esc(relatif(t['Échéance'])) : 'Sans date') + (t.Notes ? ' · ' + esc(String(t.Notes).split('\n')[0]) : '') + '</span></div><div class="rangee">' +
+    (action ? '<button class="btn principal mini" id="btFaire">' + ico(action[0]) + action[1] + '</button>' : '') +
+    '<button class="btn mini" id="btFaite">' + ico('ok') + 'Marquer faite</button><button class="btn fantome icone" id="btFermer" aria-label="Masquer">' + ico('croix') + '</button></div></div>';
+}
+function brancherBandeauTache(c) {
+  const t = S.tacheEnCours && S.d.taches.find(x => x.ID === S.tacheEnCours);
+  if (!t || !$('#btFaite')) return;
+  const finir = () => appel('crmTacheFaite', t.ID, true).then(x => { remplacer(S.d.taches, x); S.tacheEnCours = null; if (S.page === 'fiche') pageFiche(); toast('Tâche terminée'); });
+  $('#btFaite').onclick = finir;
+  $('#btFermer').onclick = () => { S.tacheEnCours = null; pageFiche(); };
+  const faire = $('#btFaire');
+  if (faire) faire.onclick = () => t.Type === 'Appel' ? fenetreAppel(c, t) : /^Répondre/.test(t.Titre) ? fenetreEmail(c, finir) : ouvrirComparateur(c);
+}
+
 function brancherTaches() {
   $$('[data-faite]').forEach(i => i.onchange = () => {
     const ligne = i.closest('.tache');
     if (ligne) ligne.classList.toggle('faite', i.checked);
     appel('crmTacheFaite', i.dataset.faite, i.checked).then(t => { remplacer(S.d.taches, t); setTimeout(afficher, 350); if (i.checked) toast('Tâche terminée'); });
   });
-  $$('[data-ouvrir]').forEach(a => a.onclick = e => { e.preventDefault(); aller('fiche', a.dataset.ouvrir); });
+  $$('[data-ouvrir]').forEach(a => a.onclick = e => { e.preventDefault(); e.stopPropagation(); const t = a.closest('[data-tache-ouvrir]'); ouvrirTache(t ? t.dataset.tacheOuvrir : null, a.dataset.ouvrir); });
+  // Toute la ligne ouvre la fiche du client, avec la tâche à faire en haut (sauf la case, les boutons et les liens)
+  $$('[data-tache-ouvrir]').forEach(l => l.addEventListener('click', e => { if (e.target.closest('input, button, a')) return; ouvrirTache(l.dataset.tacheOuvrir); }));
   $$('[data-modif]').forEach(b => b.onclick = () => fenetreTache(S.d.taches.find(t => t.ID === b.dataset.modif)));
   $$('[data-appeler]').forEach(b => b.onclick = () => { const t = S.d.taches.find(x => x.ID === b.dataset.appeler); fenetreAppel(client(t.ClientID), t); });
 }
