@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>CRM Hygiène &amp; Combat</title>
 <meta name="theme-color" content="#2a3840">
 <link rel="manifest" href="manifest.webmanifest">
@@ -32,6 +32,9 @@
   html, body { margin: 0; background: var(--fond); color: var(--texte); -webkit-font-smoothing: antialiased;
     font: 15px/1.5 "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   button, input, select, textarea { font: inherit; color: inherit; }
+  /* Comme une vraie app : pas de zoom (pincement, double tap, ni zoom auto d'iPhone sur les champs de moins de 16 px) */
+  html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+  @media (max-width: 959px) { input, select, textarea { font-size: 16px !important; } }
   a { color: var(--ardoise-700); text-decoration: none; }
   h1, h2, h3 { margin: 0; letter-spacing: -.01em; }
   h1 { font-size: 24px; font-weight: 700; }
@@ -535,7 +538,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.25-1804';
+const VERSION_APP = '2026.10.25-1807';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -774,6 +777,8 @@ function charger() {
 
 /** Ouverture : données de l'appareil affichées tout de suite (pas d'attente du serveur), puis mise à jour en arrière-plan. */
 function lancerCRM() {
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
+  document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
   enregistrerServiceWorker();
   surveillerReseau();
   const jeton = lire('crm_session', '');
