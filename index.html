@@ -556,7 +556,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.25-1838';
+const VERSION_APP = '2026.10.25-1850';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1553,7 +1553,7 @@ function carteComparatifs(c) {
     (liste.length ? liste.map((x, n) => '<div class="ligne-cmd" style="cursor:default"><span class="bulle Comparatif">' + ico('comparer') + '</span><div style="flex:1;min-width:0"><b>H&amp;C / ' + esc(x.Produit || 'concurrent') + '</b>' +
         '<div class="doux petit">' + esc(fmtDate(x.Date)) + (x.Auteur ? ' · ' + esc(String(x.Auteur).split(' ')[0]) : '') + (n === 0 ? ' · <span class="puce vert" style="padding:0 6px">joint aux e-mails</span>' : '') + '</div></div>' +
         '<button class="btn mini" data-cp-voir="' + x.ID + '">Ouvrir</button><button class="btn fantome icone" data-cp-suppr="' + x.ID + '" aria-label="Supprimer">' + ico('poubelle') + '</button></div>').join('')
-      : '<div class="carte-corps doux petit">Comparez le produit actuel du client avec le nôtre, puis « Enregistrer sur la fiche » : le PDF pourra partir avec vos e-mails et séquences grâce à <code>{{Comparatif PDF}}</code>.</div>') + '</div>';
+      : '') + '</div>';
 }
 
 function brancherComparatifs(c) {
@@ -2452,11 +2452,13 @@ function pageReglages() {
       '<label class="champ"><span>Signature des e-mails · <code>{{Owner}}</code> = la personne qui envoie</span><textarea id="rgSignature">' + esc(r.SIGNATURE) + '</textarea></label>' +
       '<div class="rangee" style="justify-content:flex-end"><button class="btn principal" id="rgOk">Enregistrer</button></div></div></div>' +
     carteApplication() +
+    carteIA() +
     carteQonto() +
     '<div class="carte"><div class="carte-tete"><h2>Données</h2></div><div class="carte-corps rangee"><a class="btn" href="' + esc(S.d.classeurUrl) + '" target="_blank">' + ico('export') + 'Ouvrir le Google Sheet</a>' +
       '<button class="btn" id="rgRecharger">' + ico('recharger') + 'Recharger les données</button></div></div></div></div>';
   $('#rgSortir').onclick = deconnecter;
   brancherQonto();
+  brancherIA();
   const inst = $('#rgInstaller');
   if (inst) inst.onclick = () => S.installation.prompt().then(() => S.installation.userChoice).then(c => { if (c && c.outcome === 'accepted') { S.installation = null; pageReglages(); } });
   $('#rgMaj').onclick = () => { majApp(); occupe($('#rgMaj'), appelDiscret('crmSync', '').then(r => appliquerDonnees(r.data))).then(() => toast('Application et données à jour')); };
@@ -2484,6 +2486,28 @@ function carteApplication() {
     '<p class="doux" style="margin:0">' + aide + '</p></div>' +
     '<div class="rangee" style="justify-content:flex-end;margin-top:12px">' + (S.installation && !installee ? '<button class="btn principal" id="rgInstaller">' + ico('import') + 'Installer l’application</button>' : '') +
     '<button class="btn" id="rgMaj">' + ico('recharger') + 'Mettre à jour maintenant</button></div></div></div>';
+}
+
+/** IA du comparateur (Gemini) : l'utilisateur colle sa clé ; elle reste sur le serveur. */
+function carteIA() {
+  const ia = S.d.ia || {};
+  return '<div class="carte"><div class="carte-tete"><h2>IA · outil comparaison</h2><span class="puce ' + (ia.connecte ? 'vert' : '') + '">' + (ia.connecte ? 'Connectée' : 'Non connectée') + '</span></div><div class="carte-corps">' +
+    (ia.connecte ? '<div class="rangee" style="justify-content:space-between"><p class="doux" style="margin:0;flex:1;min-width:220px">Gemini (' + esc(ia.modele) + ') cherche la fiche technique des produits concurrents et remplit le tableau. Vous corrigez ensuite ce qui ne va pas.</p>' +
+      '<button class="btn fantome danger" id="iaSortir">Déconnecter</button></div>'
+    : '<p class="doux" style="margin-top:0">Sur <b>aistudio.google.com</b> (connecté avec contact@) : <b>Get API key → Créer une clé</b>, puis collez-la ici. Gratuit dans la limite quotidienne de Google ; seuls les noms des produits concurrents sont envoyés.</p>' +
+      '<form id="iaForm" autocomplete="off" class="rangee" style="flex-wrap:nowrap"><input type="password" id="iaCle" autocomplete="new-password" spellcheck="false" placeholder="Clé API Gemini" style="flex:1">' +
+      '<button class="btn principal" id="iaOk" type="submit">' + ico('cadenas') + 'Connecter</button></form>') + '</div></div>';
+}
+function brancherIA() {
+  const form = $('#iaForm');
+  if (form) form.onsubmit = e => {
+    e.preventDefault();
+    const cle = $('#iaCle').value.trim();
+    if (!cle) return;
+    occupe($('#iaOk'), appel('crmIAConnecter', S.jeton, cle)).then(ia => { S.d.ia = ia; pageReglages(); toast('IA connectée'); }).catch(() => { if ($('#iaCle')) $('#iaCle').value = ''; });
+  };
+  const sortir = $('#iaSortir');
+  if (sortir) sortir.onclick = () => appel('crmIADeconnecter', S.jeton).then(ia => { S.d.ia = ia; pageReglages(); toast('IA déconnectée'); });
 }
 
 /** Banque Qonto : l'utilisateur colle lui-même sa clé ; le serveur la garde dans les propriétés du script et ne la renvoie jamais. */
