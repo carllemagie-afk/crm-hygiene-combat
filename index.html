@@ -33,7 +33,10 @@
     font: 15px/1.5 "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   button, input, select, textarea { font: inherit; color: inherit; }
   /* Comme une vraie app : pas de zoom (pincement, double tap, ni zoom auto d'iPhone sur les champs de moins de 16 px) */
-  html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+  html { touch-action: manipulation; -webkit-text-size-adjust: 100%; overscroll-behavior: none; background: var(--fond); }
+  body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+  /* Pas de sélection de texte sur les boutons et menus (comme une app) */
+  button, .nav, .onglets-mobile, .barre-mobile { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   @media (max-width: 959px) { input, select, textarea { font-size: 16px !important; } }
   a { color: var(--ardoise-700); text-decoration: none; }
   h1, h2, h3 { margin: 0; letter-spacing: -.01em; }
@@ -487,6 +490,12 @@
   .colonne .tige i { position: absolute; bottom: 0; left: 0; right: 0; border-radius: 6px 6px 3px 3px; transform-origin: bottom; animation: pousse .7s cubic-bezier(.2,.7,.3,1) both; animation-delay: calc(var(--n) * 35ms); }
   .colonne .tige i.obj { background: var(--acier-100); } .colonne .tige i.reel { background: linear-gradient(180deg, var(--acier), var(--ardoise-700)); left: 4px; right: 4px; }
   @keyframes pousse { from { transform: scaleY(0); } }
+  /* Téléphone : les 12 mois tiennent dans l'écran, rien ne dépasse */
+  .carte, .grille-obj > *, .stats > *, .grille-2 > * { min-width: 0; }
+  @media (max-width: 600px) {
+    .trajectoire { gap: 3px; padding: 14px 10px 6px; height: 190px; }
+    .colonne { min-width: 0; } .colonne .tige { width: 16px; } .colonne .lib { font-size: 9.5px !important; letter-spacing: 0 !important; } .colonne .valeur { font-size: 10px !important; }
+  }
   .colonne .lib { font-size: 11px; color: var(--pale); text-transform: uppercase; letter-spacing: .05em; }
   .colonne .valeur { font-size: 11.5px; font-weight: 600; color: var(--ardoise-700); min-height: 14px; }
   .colonne.choisie .lib { color: var(--ardoise-800); font-weight: 700; } .colonne.choisie .tige i.obj { background: #d3e0e9; }
@@ -538,7 +547,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.25-1807';
+const VERSION_APP = '2026.10.25-1812';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
