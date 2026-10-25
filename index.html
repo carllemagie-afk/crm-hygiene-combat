@@ -547,7 +547,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.25-1812';
+const VERSION_APP = '2026.10.25-1821';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -829,26 +829,55 @@ function sessionPerdue() {
 const fermerFenetres = () => $$('#couche .voile').forEach(v => v.remove());
 
 /**
- * Temps réel : toutes les 8 s (et dès que l'application revient au premier plan), on demande au serveur
- * si quelque chose a changé (autre utilisateur, réponse d'un client, séquence, banque…). Si oui, l'écran se met à jour
- * sans perdre ce que vous êtes en train d'écrire.
+ * Temps réel : une requête reste ouverte en permanence vers le serveur, qui répond dès qu'un changement est enregistré
+ * (autre appareil, autre utilisateur, réponse d'un client, banque…) avec seulement les fiches modifiées.
+ * L'écran se met à jour en 1 à 2 s, sans perdre ce que vous êtes en train d'écrire.
  */
+const TABLES_APP = { Clients: 'clients', 'Activités': 'activites', 'Tâches': 'taches', RDV: 'rdv', Vues: 'vues', 'Séquences': 'sequences',
+  'Modèles': 'modeles', Inscriptions: 'inscriptions', Commandes: 'commandes', Achats: 'achats', Banque: 'banque' };
 function surveiller() {
   if (S.surveillance) return;
-  S.surveillance = setInterval(() => verifierFraicheur(), 8000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { verifierFraicheur(); majApp(); } });
-  window.addEventListener('focus', () => verifierFraicheur());
-  document.addEventListener('focusout', () => setTimeout(() => { if (S.enAttente) appliquerDonnees(S.enAttente); }, 60));
+  S.surveillance = true;
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { ecouter(); majApp(); } });
+  window.addEventListener('focus', ecouter);
+  window.addEventListener('pageshow', ecouter);
+  document.addEventListener('focusout', () => setTimeout(() => { if (S.enAttente) appliquerDonnees(S.enAttente); else if (S.aRedessiner) redessiner(); }, 60));
+  setInterval(ecouter, 5000); // filet de sécurité : relance l'écoute si le téléphone l'a coupée
+  ecouter();
+}
+function ecouter() {
+  if (!S.d || !S.jeton || document.hidden) return;
+  if (S.ecoute && Date.now() - S.ecoute < 40000) return; // une écoute est déjà en cours
+  const depuis = S.ecoute = Date.now();
+  const base = S.d.version;
+  appelDiscret('crmAttendre', base)
+    .then(r => { recevoir(r, base); return 0; }, () => 3000)
+    .then(pause => { if (S.ecoute !== depuis) return; S.ecoute = 0; setTimeout(ecouter, pause); });
 }
 function verifierFraicheur(force) {
   if (!S.d || !S.jeton || document.hidden || S.verifEnCours) return;
   S.verifEnCours = true;
-  appelDiscret('crmSync', force ? '' : S.d.version)
-    .then(r => { if (r && r.data) appliquerDonnees(r.data); })
+  const base = S.d.version;
+  appelDiscret('crmSync', force ? '' : base)
+    .then(r => recevoir(r, force ? undefined : base))
     .catch(() => {})
     .finally(() => { S.verifEnCours = false; });
 }
-/** Saisie en cours dans la page (hors recherche) : on garde les nouvelles données de côté jusqu'à la fin de la saisie. */
+/** Applique une réponse du serveur : toutes les données, ou seulement les fiches modifiées. */
+function recevoir(r, base) {
+  if (!r || !S.d) return;
+  if (r.data) return appliquerDonnees(r.data);
+  if (!r.changements || (base !== undefined && String(base) !== String(S.d.version))) return; // réponse dépassée : la suivante rattrape
+  r.changements.forEach(c => {
+    const liste = S.d[TABLES_APP[c.t]];
+    if (!liste) return;
+    const i = liste.findIndex(x => x.ID === c.id);
+    if (!c.l) { if (i >= 0) liste.splice(i, 1); } else if (i >= 0) liste[i] = c.l; else liste.push(c.l);
+  });
+  S.d.version = r.version;
+  redessiner();
+}
+/** Saisie en cours dans la page (hors recherche) : on attend la fin de la saisie pour redessiner. */
 function saisieEnCours() {
   const actif = document.activeElement;
   if (actif && actif.id !== 'recherche' && $('#page').contains(actif) && /^(INPUT|TEXTAREA|SELECT)$/.test(actif.tagName)) return true;
@@ -857,9 +886,14 @@ function saisieEnCours() {
 function appliquerDonnees(d) {
   if (saisieEnCours()) { S.enAttente = d; return; }
   S.enAttente = null;
+  S.d = d;
+  redessiner();
+}
+function redessiner() {
+  if (saisieEnCours()) { S.aRedessiner = true; return; }
+  S.aRedessiner = false;
   const recherche = document.activeElement && document.activeElement.id === 'recherche' ? [$('#recherche').selectionStart, $('#recherche').selectionEnd] : null;
   const y = window.scrollY;
-  S.d = d;
   afficher();
   window.scrollTo(0, y);
   if (recherche && $('#recherche')) { $('#recherche').focus({ preventScroll: true }); try { $('#recherche').setSelectionRange(recherche[0], recherche[1]); } catch (e) { /* champ sans curseur */ } }
