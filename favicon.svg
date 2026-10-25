@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#384a54"/><stop offset="1" stop-color="#1d282e"/></linearGradient></defs>
+<rect width="64" height="64" rx="14" fill="url(#f)"/><g transform="translate(5.3 5.3) scale(2.225)" fill="none" stroke="#fff" stroke-linejoin="round"><path d="M12 2.2 4.5 5v6.2c0 5 3.3 9 7.5 10.6 4.2-1.6 7.5-5.6 7.5-10.6V5z" stroke-width=".78"/><path d="M12 4.1 6.2 6.3v4.9c0 4 2.5 7.3 5.8 8.6 3.3-1.3 5.8-4.6 5.8-8.6V6.3z" stroke-width=".42"/></g>
+<text x="32" y="35.1" text-anchor="middle" font-family="DM Sans, Avenir Next, system-ui, sans-serif" font-weight="700" font-size="8.6" letter-spacing=".6" fill="#87a6bb">CRM</text></svg>
