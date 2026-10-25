@@ -1,5 +1,5 @@
 /* Service worker du CRM Hygiène & Combat : l'application s'ouvre sans attendre le réseau et se met à jour toute seule. */
-const VERSION = 'crm-2026.10.25-1936';
+const VERSION = 'crm-2026.10.25-2124';
 const FICHIERS = ['./', './index.html', './manifest.webmanifest', './favicon.svg', './icone-192.png', './icone-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

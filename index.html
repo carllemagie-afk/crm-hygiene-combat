@@ -264,6 +264,16 @@
   .chronologie .texte-act { white-space: pre-wrap; font-size: 14px; color: var(--texte); margin-top: 4px; background: var(--acier-50); border-radius: 10px; padding: 10px 12px; }
   .chronologie .texte-act.replie { max-height: 92px; overflow: hidden; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); cursor: pointer; }
   .chronologie .meta { font-size: 12.5px; color: var(--pale); margin-top: 4px; }
+  /* E-mails façon conversation : le client à gauche (vert), nous à droite (bleu acier) */
+  .chronologie li.conv-nous { grid-template-columns: minmax(0,1fr) 34px; }
+  .chronologie li.conv-nous > .bulle { grid-column: 2; grid-row: 1; }
+  .chronologie li.conv-nous > div { grid-column: 1; grid-row: 1; text-align: right; }
+  .chronologie li.conv-nous:not(:last-child)::before { left: auto; right: 16px; }
+  .chronologie li.conv-nous .texte-act { display: inline-block; text-align: left; max-width: 92%; background: #e3edf4; border-radius: 14px 4px 14px 14px; }
+  .chronologie li.conv-client .texte-act { display: inline-block; max-width: 92%; background: var(--ok-50); border: 1px solid #cfe9db; border-radius: 4px 14px 14px 14px; }
+  .chronologie li.conv-client .titre-act { color: var(--ok); }
+  .chronologie li.conv-client .bulle { background: var(--ok); color: #fff; border-color: transparent; }
+  .chronologie li.conv-nous .bulle { background: var(--ardoise-700); color: #fff; border-color: transparent; }
 
   .progression { height: 6px; background: var(--acier-100); border-radius: 999px; overflow: hidden; margin: 12px 0 14px; }
   .progression i { display: block; height: 100%; background: linear-gradient(90deg, var(--ardoise-700), var(--acier)); border-radius: 999px; transition: width .6s cubic-bezier(.2,.7,.3,1); }
@@ -556,7 +566,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.25-1936';
+const VERSION_APP = '2026.10.25-2124';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1423,6 +1433,9 @@ function enregistrerChamps(id, changes, element, rafraichir) {
 }
 const enregistrerChamp = (id, champ, valeur, element, rafraichir) => enregistrerChamps(id, { [champ]: valeur }, element, rafraichir);
 
+/** E-mail reçu du client ('client'), envoyé par nous ('nous'), ou autre activité (''). */
+const sensEmail = a => a.Type !== 'E-mail' ? '' : a['Résultat'] === 'Réponse reçue' ? 'client' : /^(Envoyé|Séquence)/.test(a['Résultat'] || '') ? 'nous' : '';
+
 function carteActivite(c) {
   const filtres = ['Tout', 'E-mail', 'Clic', 'Appel', 'Note', 'Commande', 'Tâche', 'RDV', 'Séquence'];
   const histo = S.d.activites.filter(a => a.ClientID === c.ID && (S.filtreActivite === 'Tout' || a.Type === S.filtreActivite))
@@ -1430,11 +1443,12 @@ function carteActivite(c) {
   return '<div class="carte"><div class="carte-tete"><h2>Activité</h2></div>' +
     '<div style="padding:12px 18px 0"><div class="vues" style="padding-bottom:4px">' + filtres.map(f => '<button data-filtre-act="' + f + '" class="' + (S.filtreActivite === f ? 'actif' : '') + '">' +
       ({ Tout: 'Tout', 'E-mail': 'E-mails', Clic: 'Clics', Appel: 'Appels', Note: 'Notes', Commande: 'Commandes', 'Tâche': 'Tâches', RDV: 'Rendez-vous', 'Séquence': 'Séquences' }[f]) + '</button>').join('') + '</div></div>' +
-    (histo.length ? '<ul class="chronologie">' + histo.map((a, n) => '<li style="--n:' + Math.min(n, 20) + '"><span class="bulle ' + esc(a.Type) + '">' + ico(TYPE_ICONE[a.Type] || 'note') + '</span><div>' +
-      '<div class="titre-act">' + esc(a.Type) + (a['Résultat'] ? ' <span>· ' + esc(a['Résultat']) + '</span>' : '') +
+    (histo.length ? '<ul class="chronologie">' + histo.map((a, n) => { const sens = sensEmail(a);
+      return '<li class="' + (sens ? 'conv-' + sens : '') + '" style="--n:' + Math.min(n, 20) + '"><span class="bulle ' + esc(a.Type) + '">' + ico(TYPE_ICONE[a.Type] || 'note') + '</span><div>' +
+      '<div class="titre-act">' + (sens === 'client' ? esc(c['Prénom'] || nomClient(c)) + ' <span>· a répondu</span>' : sens === 'nous' ? 'E-mail envoyé <span>· ' + esc(a['Résultat'] || '') + '</span>' : esc(a.Type) + (a['Résultat'] ? ' <span>· ' + esc(a['Résultat']) + '</span>' : '')) +
         (['Note', 'Appel'].includes(a.Type) ? '<button class="btn fantome icone mini-icone" data-modif-act="' + a.ID + '" aria-label="Modifier ou supprimer">' + ico('crayon') + '</button>' : '') + '</div>' +
       (a.Texte ? '<div class="texte-act' + (String(a.Texte).length > 240 ? ' replie' : '') + '">' + esc(a.Texte) + '</div>' : '') +
-      '<div class="meta">' + esc(relatif(a.Date)) + (a.Auteur ? ' · ' + esc(a.Auteur) : '') + '</div></div></li>').join('') + '</ul>'
+      '<div class="meta">' + esc(relatif(a.Date)) + (a.Auteur ? ' · ' + esc(a.Auteur) : '') + '</div></div></li>'; }).join('') + '</ul>'
       : '<div class="vide">' + ico('horloge') + '<b>Rien pour l’instant</b>Les appels, e-mails, notes et séquences apparaîtront ici.</div>') + '</div>';
 }
 
