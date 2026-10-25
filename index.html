@@ -566,7 +566,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.25-2124';
+const VERSION_APP = '2026.10.25-2200';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1645,27 +1645,41 @@ function carteAVenir(c) {
 function fenetreAppel(c, tache) {
   const tel = telNettoye(c['Téléphone']), tel2 = telNettoye(c['Téléphone 2']);
   const f = fenetre({ titre: 'Appel · ' + esc(nomClient(c)), corps:
-    (tel ? '<a class="btn principal" href="tel:' + esc(tel) + '" style="width:100%;padding:12px;margin-bottom:' + (tel2 ? 8 : 16) + 'px">' + ico('tel') + 'Composer le ' + esc(c['Téléphone']) + '</a>'
+    (tel ? '<a class="btn principal" data-composer href="tel:' + esc(tel) + '" style="width:100%;padding:12px;margin-bottom:' + (tel2 ? 8 : 16) + 'px">' + ico('tel') + 'Composer le ' + esc(c['Téléphone']) + '</a>'
       : '<p class="doux" style="margin-top:0">Pas de numéro sur la fiche.</p>') +
-    (tel2 ? '<a class="btn" href="tel:' + esc(tel2) + '" style="width:100%;margin-bottom:16px">' + ico('tel') + '2e numéro : ' + esc(c['Téléphone 2']) + '</a>' : '') +
+    (tel2 ? '<a class="btn" data-composer href="tel:' + esc(tel2) + '" style="width:100%;margin-bottom:16px">' + ico('tel') + '2e numéro : ' + esc(c['Téléphone 2']) + '</a>' : '') +
     '<div class="champ"><span class="doux petit" style="display:block;margin-bottom:6px">Résultat</span><div class="segment" id="apRes">' +
       ['Joint', 'Pas de réponse', 'Messagerie', 'Mauvais numéro'].map((r, i) => '<button data-r="' + r + '" class="' + (i === 0 ? 'actif' : '') + '">' + r + '</button>').join('') + '</div></div>' +
     '<label class="champ"><span>Compte rendu</span><textarea id="apTxt" placeholder="Ce qui s’est dit, besoins, objections…"></textarea></label>' +
-    '<div class="grille-2"><label class="champ"><span>Changer le tag</span><select id="apTag"><option value="">Inchangé (' + esc(c.Tag || '—') + ')</option>' +
-      S.d.tags.map(t => '<option>' + t + '</option>').join('') + '</select></label>' +
-    '<label class="champ"><span>Devis</span><select id="apDevis"><option value="">Inchangé (' + esc(c.Devis || 'Aucun') + ')</option>' + S.d.devis.map(t => '<option>' + t + '</option>').join('') + '</select></label></div>' +
+    '<div class="champ"><span class="doux petit" style="display:block;margin-bottom:6px">Tag après l’appel <b style="color:var(--danger)">*</b> <span class="pale">(obligatoire pour valider · actuel : ' + esc(c.Tag || '—') + ')</span></span>' +
+      '<div class="choix-tag" id="apTags" style="margin-bottom:14px">' + S.d.tags.map(t => '<button type="button" data-aptag="' + t + '">' + t + '</button>').join('') + '</div></div>' +
+    '<label class="champ"><span>Devis</span><select id="apDevis"><option value="">Inchangé (' + esc(c.Devis || 'Aucun') + ')</option>' + S.d.devis.map(t => '<option>' + t + '</option>').join('') + '</select></label>' +
     '<label class="interrupteur" style="margin-bottom:12px"><input type="checkbox" id="apRappel"><i></i>Programmer un rappel</label>' +
     '<div id="apZone" class="grille-2" style="display:none"><label class="champ"><span>Date</span><input type="date" id="apDate" value="' + dateLocale(new Date(Date.now() + 864e5)) + '"></label>' +
       '<label class="champ"><span>Heure</span><input type="time" id="apHeure" value="10:00"></label></div>',
-    pied: '<button class="btn" data-fermer>Annuler</button><button class="btn principal" id="apOk">Enregistrer l’appel</button>' });
-  let resultat = 'Joint';
+    pied: '<span class="gauche pale petit" id="apAide">Choisissez un tag pour valider</span><button class="btn" data-fermer id="apAnnuler">Annuler</button><button class="btn principal" id="apOk" disabled>Enregistrer l’appel</button>', fermable: false });
+  let resultat = 'Joint', tag = '';
+  // Choisir le tag est obligatoire pour valider l'appel
+  f.el.querySelectorAll('[data-aptag]').forEach(b => b.onclick = () => {
+    tag = b.dataset.aptag;
+    f.el.querySelectorAll('[data-aptag]').forEach(x => { x.className = x === b ? 'actif tag ' + tag : ''; });
+    f.$('#apOk').disabled = false;
+    f.$('#apAide').textContent = '';
+  });
+  // Appel composé : un « New » passe en Qualifying, et la fenêtre ne se ferme plus qu'en enregistrant l'appel
+  f.el.querySelectorAll('[data-composer]').forEach(a => a.addEventListener('click', () => {
+    f.$('#apAnnuler').hidden = true;
+    f.$('#apAide').textContent = 'Appel en cours : choisissez un tag pour valider';
+    if (c.Tag === 'New') { enregistrerChamps(c.ID, { Tag: 'Qualifying' }); toast(nomClient(c) + ' passe en Qualifying'); }
+  }));
   f.el.querySelectorAll('#apRes button').forEach(b => b.onclick = () => { resultat = b.dataset.r; f.el.querySelectorAll('#apRes button').forEach(x => x.classList.toggle('actif', x === b)); });
   f.$('#apRappel').onchange = e => { f.$('#apZone').style.display = e.target.checked ? 'grid' : 'none'; };
   f.$('#apOk').onclick = () => {
     const etapes = [appel('crmActivite', { clientId: c.ID, type: 'Appel', resultat, texte: f.$('#apTxt').value.trim(), auteur: S.moi })
       .then(r => { S.d.activites.push(r.activite); if (r.client) majClient(r.client); })];
     const changes = {};
-    if (f.$('#apTag').value) changes.Tag = f.$('#apTag').value;
+    if (!tag) return toast('Choisissez un tag pour valider l’appel', true);
+    if (tag !== client(c.ID).Tag) changes.Tag = tag;
     if (f.$('#apDevis').value) changes.Devis = f.$('#apDevis').value;
     if (Object.keys(changes).length) etapes.push(appel('crmEnregistrerClient', c.ID, changes).then(x => majClient(x)));
     if (f.$('#apRappel').checked) etapes.push(appel('crmTache', { clientId: c.ID, type: 'Appel', titre: 'Rappeler ' + (c['Prénom'] || nomClient(c)),
