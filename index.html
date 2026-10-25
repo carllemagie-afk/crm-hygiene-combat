@@ -198,9 +198,24 @@
   .fil { display: flex; align-items: center; gap: 6px; color: var(--doux); font-size: 14px; margin-bottom: 16px; }
   .fil a { display: inline-flex; align-items: center; gap: 4px; color: var(--doux); }
   .fil a:hover { color: var(--texte); }
-  .fiche { display: grid; gap: 16px; grid-template-columns: 1fr; align-items: start; }
+  .fiche { display: grid; gap: 16px; grid-template-columns: minmax(0,1fr); align-items: start; }
   .fiche-onglets { margin-bottom: 14px; }
-  .fiche > section { display: none; flex-direction: column; gap: 16px; }
+  .fiche > section { display: none; flex-direction: column; gap: 16px; min-width: 0; }
+  /* Mise à jour en temps réel : pas d'animation d'apparition (l'écran ne « clignote » pas) */
+  .sans-anim #page * { animation: none !important; }
+  /* Téléphone : historique plus compact, les filtres défilent sur une ligne */
+  @media (max-width: 600px) {
+    .chronologie { padding: 4px 12px 14px; }
+    .chronologie li { grid-template-columns: 28px minmax(0,1fr); gap: 10px; padding: 10px 0; }
+    .chronologie li.conv-nous { grid-template-columns: minmax(0,1fr) 28px; }
+    .chronologie li:not(:last-child)::before { left: 13px; top: 40px; }
+    .chronologie li.conv-nous:not(:last-child)::before { right: 13px; }
+    .chronologie .bulle { width: 28px; height: 28px; } .chronologie .bulle svg { width: 14px; height: 14px; }
+    .chronologie .titre-act { font-size: 13.5px; }
+    .chronologie .texte-act { font-size: 13.5px; padding: 8px 10px; overflow-wrap: anywhere; }
+    .chronologie li.conv-nous .texte-act, .chronologie li.conv-client .texte-act { max-width: 100%; }
+    .chronologie .meta { font-size: 12px; }
+  }
   .fiche > section.visible { display: flex; }
   @media (min-width: 1100px) {
     .fiche { grid-template-columns: 340px minmax(0,1fr); }
@@ -566,7 +581,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.25-2223';
+const VERSION_APP = '2026.10.25-2344';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -913,6 +928,7 @@ function appliquerDonnees(d) {
 function redessiner() {
   if (saisieEnCours()) { S.aRedessiner = true; return; }
   S.aRedessiner = false;
+  document.body.classList.add('sans-anim');
   const recherche = document.activeElement && document.activeElement.id === 'recherche' ? [$('#recherche').selectionStart, $('#recherche').selectionEnd] : null;
   const y = window.scrollY;
   afficher();
@@ -1039,6 +1055,7 @@ function menuPlus() {
 }
 
 function aller(page, id) {
+  document.body.classList.remove('sans-anim');
   if (page === 'sequence' || S.page === 'sequence') S.brouillonSeq = null;
   S.page = page;
   S.id = id || null;
