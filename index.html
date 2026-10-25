@@ -63,9 +63,9 @@
     background: linear-gradient(180deg, var(--ardoise-800), var(--ardoise-700)); color: #fff; }
   .barre-mobile svg.logo { width: 24px; height: 24px; stroke: #fff; fill: none; stroke-width: 1.4; }
   .barre-mobile b { font-size: 12px; letter-spacing: .16em; font-weight: 600; }
-  main { width: 100%; max-width: 1360px; margin: 0 auto; padding: 18px 16px 104px; }
+  main { width: 100%; max-width: 1360px; margin: 0 auto; padding: 18px 16px calc(76px + env(safe-area-inset-bottom)); }
   .onglets-mobile { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; display: flex; background: rgba(255,255,255,.96);
-    backdrop-filter: blur(10px); border-top: 1px solid var(--trait); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
+    backdrop-filter: blur(10px); border-top: 1px solid var(--trait); padding: 6px 4px max(6px, calc(env(safe-area-inset-bottom) - 14px)); }
   .onglets-mobile button { flex: 1; border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 3px;
     font-size: 10.5px; color: var(--pale); padding: 4px 0; cursor: pointer; position: relative; transition: color var(--vite); }
   .onglets-mobile button.actif { color: var(--ardoise-700); font-weight: 600; }
@@ -535,7 +535,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.25-1730';
+const VERSION_APP = '2026.10.25-1804';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
