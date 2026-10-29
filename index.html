@@ -586,7 +586,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.30-0029';
+const VERSION_APP = '2026.10.30-0047';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -667,15 +667,16 @@ const CHAMPS_NON_IMPORTABLES = ['ID', 'Créé le', 'Séquence', 'Séquence nom']
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 // <signature> Repris tel quel par l'application (aperçu dans la fenêtre d'e-mail) : rien de propre à Apps Script ici.
-const LOGO_SIGNATURE = 'https://carllemagie-afk.github.io/crm-hygiene-combat/signature-logo.png';
+const ADRESSE_IMAGES = 'https://carllemagie-afk.github.io/crm-hygiene-combat/';
 const EMAIL_SIGNATURE = 'contact@hygiene-combat.fr';
 
-/** Ligne du réglage « Équipe » (Nom | Titre | Téléphone) de la personne qui envoie, retrouvée par son prénom. */
+/** Ligne du réglage « Équipe » (Nom | Titre | Téléphone | Photo) de la personne qui envoie, retrouvée par son prénom. */
 function personneEquipe(owner, equipe) {
   const prenom = s => String(s || '').trim().split(/\s+/)[0].toLowerCase();
   const lignes = String(equipe || '').split('\n').map(l => l.split('|').map(s => s.trim())).filter(l => l[0]);
   const l = lignes.find(x => prenom(x[0]) === prenom(owner)) || [String(owner || '').trim() || 'Hygiène & Combat'];
-  return { nom: l[0], titre: l[1] || '', tel: l[2] || '' };
+  const photo = l[3] || '';
+  return { nom: l[0], titre: l[1] || '', tel: l[2] || '', photo: !photo || /^https?:\/\//.test(photo) ? photo : ADRESSE_IMAGES + photo };
 }
 
 /** 06 15 61 35 31 → +33615613531 (lien « Appeler »). */
@@ -684,35 +685,50 @@ function telInternational(tel) {
   return /^0\d{9}$/.test(n) ? '+33' + n.slice(1) : n;
 }
 
+/** Sans lien de prise de rendez-vous dans Réglages, le bouton « Rendez-vous » ouvre un e-mail de demande de rendez-vous. */
+function lienRendezVous(lienRdv) {
+  return lienRdv || 'mailto:' + EMAIL_SIGNATURE + '?subject=' + encodeURIComponent('Prise de rendez-vous');
+}
+
 /** Version texte (partie « texte brut » de l'e-mail, et aperçu de séquence). */
 function signatureTexte(p, lienRdv) {
-  return [p.nom, (p.titre ? p.titre + ' - ' : '') + 'Hygiène & Combat', p.tel, EMAIL_SIGNATURE, lienRdv ? 'Prendre rendez-vous : ' + lienRdv : '']
+  return [p.nom, 'Hygiène & Combat' + (p.titre ? ' | ' + p.titre : ''), p.tel, EMAIL_SIGNATURE, lienRdv ? 'Prendre rendez-vous : ' + lienRdv : '']
     .filter(Boolean).join('\n');
 }
 
-/** Signature HTML : logo rond, nom, titre, téléphone, e-mail, puis les boutons « Appeler » et « Rendez-vous ». Tableaux et styles en ligne (Gmail, Outlook, Apple Mail). */
+/**
+ * Signature HTML : photo ronde de la personne à gauche, nom / société / téléphone / e-mail au milieu, logo rond à droite ;
+ * sous un trait, les boutons « Appeler » (à gauche) et « Rendez-vous » (à droite). Tableaux et styles en ligne (Gmail, Outlook, Apple Mail).
+ */
 function signatureHtml(p, lienRdv) {
   const e = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const police = 'font-family:Arial,Helvetica,sans-serif;';
   const tel = telInternational(p.tel);
-  const boutons = [
-    tel ? ['tel:' + tel, '📱 Appeler', '#4f7a96', '#ffffff'] : null,
-    lienRdv ? [lienRdv, '📅 Rendez-vous', '#dce6ee', '#1d282e'] : null,
-  ].filter(Boolean);
-  const cases = boutons.map((b, i) => '<td width="' + Math.floor(100 / boutons.length) + '%" style="padding:0 ' + (i < boutons.length - 1 ? '6px' : '0') + ' 0 ' + (i ? '6px' : '0') + ';">' +
-    '<a href="' + e(b[0]) + '" style="display:block;' + police + 'font-size:14px;font-weight:bold;line-height:20px;color:' + b[3] + ';background-color:' + b[2] +
-    ';text-decoration:none;text-align:center;padding:10px 12px;border-radius:6px;">' + b[1] + '</a></td>').join('');
-  const ligne = (icone, texte, lien) => '<tr><td style="' + police + 'font-size:14px;line-height:22px;color:#1d282e;font-weight:bold;padding-top:2px;">' + icone + '&nbsp;&nbsp;' +
-    '<a href="' + e(lien) + '" style="color:#1d282e;text-decoration:none;">' + e(texte) + '</a></td></tr>';
-  return '<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;max-width:460px;width:100%;margin-top:18px;">' +
-    '<tr><td width="96" valign="middle" style="padding:0 18px 14px 0;"><img src="' + LOGO_SIGNATURE + '" width="96" height="96" alt="Hygiène &amp; Combat" style="display:block;border:0;border-radius:48px;"></td>' +
-    '<td valign="middle" style="padding:0 0 14px 0;"><table cellpadding="0" cellspacing="0" border="0" role="presentation">' +
-      '<tr><td style="' + police + 'font-size:18px;line-height:24px;font-weight:bold;color:#1d282e;">' + e(p.nom) + '</td></tr>' +
-      '<tr><td style="' + police + 'font-size:14px;line-height:22px;color:#6b7c86;padding-bottom:6px;">' + (p.titre ? e(p.titre) + ' | ' : '') + 'Hygiène &amp; Combat</td></tr>' +
-      (p.tel ? ligne('📞', p.tel, 'tel:' + tel) : '') +
-      ligne('✉️', EMAIL_SIGNATURE, 'mailto:' + EMAIL_SIGNATURE) +
-    '</table></td></tr>' +
-    (cases ? '<tr><td colspan="2" style="border-top:1px solid #1d282e;padding-top:14px;"><table cellpadding="0" cellspacing="0" border="0" role="presentation" width="100%"><tr>' + cases + '</tr></table></td></tr>' : '') +
+  const initiales = p.nom.split(/\s+/).slice(0, 2).map(m => m[0] || '').join('').toUpperCase();
+  const rond = contenu => '<td width="108" valign="middle" style="width:108px;">' + contenu + '</td>';
+  const photo = p.photo
+    ? '<img src="' + e(p.photo) + '" width="108" height="108" alt="' + e(p.nom) + '" style="display:block;border:0;width:108px;height:108px;border-radius:54px;">'
+    : '<div style="width:108px;height:108px;border-radius:54px;background-color:#afdbfc;text-align:center;' + police + 'font-size:36px;line-height:108px;font-weight:bold;color:#1a1a1a;">' + e(initiales) + '</div>';
+  const logo = '<img src="' + ADRESSE_IMAGES + 'signature-logo.png" width="108" height="108" alt="Hygiène &amp; Combat" style="display:block;border:0;width:108px;height:108px;border-radius:54px;">';
+  const ligne = (icone, texte, lien) => '<tr><td style="' + police + 'font-size:15px;line-height:24px;font-weight:bold;color:#1a1a1a;padding-top:6px;">' + icone + '&nbsp;' +
+    '<a href="' + e(lien) + '" style="color:#1a1a1a;text-decoration:none;">' + e(texte) + '</a></td></tr>';
+  const bouton = (lien, texte, fond, couleur) => '<a href="' + e(lien) + '" style="display:block;' + police + 'font-size:15px;line-height:20px;font-weight:bold;color:' + couleur +
+    ';background-color:' + fond + ';text-decoration:none;text-align:center;padding:9px 12px;border-radius:6px;">' + texte + '</a>';
+  return '<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;width:100%;max-width:600px;margin-top:18px;">' +
+    '<tr><td style="padding:0 0 18px 0;"><table cellpadding="0" cellspacing="0" border="0" role="presentation" align="center" style="border-collapse:collapse;margin:0 auto;"><tr>' +
+      rond(photo) +
+      '<td valign="middle" style="padding:0 22px;"><table cellpadding="0" cellspacing="0" border="0" role="presentation">' +
+        '<tr><td style="' + police + 'font-size:19px;line-height:26px;font-weight:bold;color:#1a1a1a;">' + e(p.nom) + '</td></tr>' +
+        '<tr><td style="' + police + 'font-size:15px;line-height:22px;color:#777777;padding:4px 0 6px;">Hygiène &amp; Combat' + (p.titre ? ' | ' + e(p.titre) : '') + '</td></tr>' +
+        (p.tel ? ligne('📞', p.tel, 'tel:' + tel) : '') +
+        ligne('✉️', EMAIL_SIGNATURE, 'mailto:' + EMAIL_SIGNATURE) +
+      '</table></td>' +
+      rond(logo) +
+    '</tr></table></td></tr>' +
+    '<tr><td style="border-top:1px solid #212024;padding-top:16px;"><table cellpadding="0" cellspacing="0" border="0" role="presentation" width="100%" style="border-collapse:collapse;"><tr>' +
+      '<td width="50%" style="padding-right:6px;">' + (tel ? bouton('tel:' + tel, '📱 Appeler', '#5c8edc', '#ffffff') : '') + '</td>' +
+      '<td width="50%" style="padding-left:6px;">' + bouton(lienRendezVous(lienRdv), '📅 Rendez-vous', '#e1dcfb', '#212024') + '</td>' +
+    '</tr></table></td></tr>' +
     '</table>';
 }
 
@@ -2608,7 +2624,7 @@ function pageReglages() {
       '<label class="champ"><span>Fin des envois (heure)</span><input type="number" id="rgFin" value="' + esc(r.HEURE_FIN) + '" min="1" max="24"></label>' +
       '<label class="champ"><span>Durée d’un rendez-vous (min)</span><input type="number" id="rgDuree" value="' + esc(r.DUREE_RDV) + '" min="5" step="5"></label>' +
       '<label class="champ"><span>Lien de prise de rendez-vous · <code>{{Lien RDV}}</code></span><input type="url" id="rgLienRdv" value="' + esc(r.LIEN_RDV || '') + '" placeholder="https://calendar.app.google/…"></label></div>' +
-      '<label class="champ"><span>Signature des e-mails · une ligne par personne : Nom | Titre | Téléphone</span><textarea id="rgEquipe" rows="3">' + esc(r.EQUIPE || '') + '</textarea></label>' +
+      '<label class="champ"><span>Signature des e-mails · une ligne par personne : Nom | Titre | Téléphone | Photo</span><textarea id="rgEquipe" rows="3">' + esc(r.EQUIPE || '') + '</textarea></label>' +
       '<div class="rangee" style="justify-content:flex-end"><button class="btn principal" id="rgOk">Enregistrer</button></div></div></div>' +
     carteApplication() +
     carteIA() +
