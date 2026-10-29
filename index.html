@@ -586,7 +586,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.30-0047';
+const VERSION_APP = '2026.10.30-0053';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -697,7 +697,7 @@ function signatureTexte(p, lienRdv) {
 }
 
 /**
- * Signature HTML : photo ronde de la personne à gauche, nom / société / téléphone / e-mail au milieu, logo rond à droite ;
+ * Signature HTML : photo ronde de la personne à gauche, nom / société / téléphone / e-mail au milieu, logo de la marque (sans rond) à droite ;
  * sous un trait, les boutons « Appeler » (à gauche) et « Rendez-vous » (à droite). Tableaux et styles en ligne (Gmail, Outlook, Apple Mail).
  */
 function signatureHtml(p, lienRdv) {
@@ -705,11 +705,11 @@ function signatureHtml(p, lienRdv) {
   const police = 'font-family:Arial,Helvetica,sans-serif;';
   const tel = telInternational(p.tel);
   const initiales = p.nom.split(/\s+/).slice(0, 2).map(m => m[0] || '').join('').toUpperCase();
-  const rond = contenu => '<td width="108" valign="middle" style="width:108px;">' + contenu + '</td>';
+  const rond = (contenu, l = 108) => '<td width="' + l + '" valign="middle" style="width:' + l + 'px;">' + contenu + '</td>';
   const photo = p.photo
     ? '<img src="' + e(p.photo) + '" width="108" height="108" alt="' + e(p.nom) + '" style="display:block;border:0;width:108px;height:108px;border-radius:54px;">'
     : '<div style="width:108px;height:108px;border-radius:54px;background-color:#afdbfc;text-align:center;' + police + 'font-size:36px;line-height:108px;font-weight:bold;color:#1a1a1a;">' + e(initiales) + '</div>';
-  const logo = '<img src="' + ADRESSE_IMAGES + 'signature-logo.png" width="108" height="108" alt="Hygiène &amp; Combat" style="display:block;border:0;width:108px;height:108px;border-radius:54px;">';
+  const logo = '<img src="' + ADRESSE_IMAGES + 'signature-marque.png" width="127" height="108" alt="Hygiène &amp; Combat" style="display:block;border:0;width:127px;height:108px;">';
   const ligne = (icone, texte, lien) => '<tr><td style="' + police + 'font-size:15px;line-height:24px;font-weight:bold;color:#1a1a1a;padding-top:6px;">' + icone + '&nbsp;' +
     '<a href="' + e(lien) + '" style="color:#1a1a1a;text-decoration:none;">' + e(texte) + '</a></td></tr>';
   const bouton = (lien, texte, fond, couleur) => '<a href="' + e(lien) + '" style="display:block;' + police + 'font-size:15px;line-height:20px;font-weight:bold;color:' + couleur +
@@ -723,7 +723,7 @@ function signatureHtml(p, lienRdv) {
         (p.tel ? ligne('📞', p.tel, 'tel:' + tel) : '') +
         ligne('✉️', EMAIL_SIGNATURE, 'mailto:' + EMAIL_SIGNATURE) +
       '</table></td>' +
-      rond(logo) +
+      rond(logo, 127) +
     '</tr></table></td></tr>' +
     '<tr><td style="border-top:1px solid #212024;padding-top:16px;"><table cellpadding="0" cellspacing="0" border="0" role="presentation" width="100%" style="border-collapse:collapse;"><tr>' +
       '<td width="50%" style="padding-right:6px;">' + (tel ? bouton('tel:' + tel, '📱 Appeler', '#5c8edc', '#ffffff') : '') + '</td>' +
