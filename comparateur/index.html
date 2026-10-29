@@ -1,8 +1,9 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><style>
-#view-compare td.favorable{background:#d8f1e2!important;color:#14532d!important}
-#view-compare td.unfavorable{background:#fbe1de!important;color:#8f2a22!important}
-.legend-swatch.favorable:before{background:#d8f1e2!important;border-color:#2f8460!important}
-.legend-swatch.unfavorable:before{background:#fbe1de!important;border-color:#c2413b!important}
+#view-compare td.favorable{background:#e4f5ea!important}
+#view-compare td.unfavorable{background:#fde9e7!important}
+#view-compare td.favorable,#view-compare td.favorable *,#view-compare td.unfavorable,#view-compare td.unfavorable *{color:#000!important}
+.legend-swatch.favorable:before{background:#e4f5ea!important;border-color:#8fcca6!important}
+.legend-swatch.unfavorable:before{background:#fde9e7!important;border-color:#eda59f!important}
 </style><script>
 /* Pont avec le CRM Hygiène & Combat (ajouté à la construction) */
 const CRM_API = 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec';
@@ -32,7 +33,7 @@ async function crmTextePDF(octets) {
 /*
  * Couleurs de la vue client, case par case (règles Hygiène & Combat) :
  * Oui = vert / Non = rouge pour nettoyage, détergent, désinfection et désodorisant ; parfum présent = vert, absent = rouge ;
- * surfaces : pH entre 7 et 11 = vert, sinon « Acide / Basique, abîme les surfaces » en rouge ;
+ * surfaces : 7 ≤ pH < 11 = vert, sinon « Acide / Basique, abîme les surfaces » en rouge ;
  * traces blanches : sans alcool = « Non » en vert, avec alcool = « Oui » en rouge ; fabriqué en France = vert, ailleurs = rouge ;
  * prix pour 1 usage : le moins cher en vert, le plus cher en rouge.
  */
@@ -46,7 +47,7 @@ function crmValeur(d, p, v) {
     const ph = crmPh(p);
     if (ph === null) return v;
     const txt = String(ph).replace('.', ',');
-    const value = ph < 7 ? 'Acide, abîme les surfaces (pH ' + txt + ')' : ph >= 11 ? 'Basique, abîme les surfaces (pH ' + txt + ')' : 'Aucune (pH ' + txt + ', entre 7 et 11)';
+    const value = ph < 7 ? 'Acide, abîme les surfaces (pH ' + txt + ')' : ph >= 11 ? 'Basique, abîme les surfaces (pH ' + txt + ')' : 'Aucune (pH ' + txt + ', 7 ≤ pH < 11)';
     return Object.assign({}, v || {}, { value, detail: '', source: p.cells.ph.source || v?.source || '' });
   }
   if (d.key === 'white_marks') {
