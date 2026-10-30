@@ -587,7 +587,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.30-0340';
+const VERSION_APP = '2026.10.30-0341';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -702,8 +702,9 @@ function signatureTexte(p, lienRdv) {
 /**
  * Signature HTML : photo ronde de la personne à gauche, nom / société / téléphone / e-mail au milieu, logo de la marque (sans rond) à droite ;
  * sous un trait, les boutons « Appeler » (à gauche) et « Rendez-vous » (à droite). Tableaux et styles en ligne (Gmail, Outlook, Apple Mail).
+ * `marque` (facultatif) : texte invisible propre à l'e-mail.
  */
-function signatureHtml(p, lienRdv) {
+function signatureHtml(p, lienRdv, marque) {
   const e = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const police = 'font-family:Arial,Helvetica,sans-serif;';
   const tel = telInternational(p.tel);
@@ -712,7 +713,7 @@ function signatureHtml(p, lienRdv) {
   const photo = p.photo
     ? '<img src="' + e(p.photo) + '" width="108" height="108" alt="' + e(p.nom) + '" style="display:block;border:0;width:108px;height:108px;border-radius:54px;">'
     : '<div style="width:108px;height:108px;border-radius:54px;background-color:#afdbfc;text-align:center;' + police + 'font-size:36px;line-height:108px;font-weight:bold;color:#1a1a1a;">' + e(initiales) + '</div>';
-  const logo = '<img src="' + ADRESSE_IMAGES + 'signature-marque.png" width="127" height="108" alt="Hygiène &amp; Combat" style="display:block;border:0;width:127px;height:108px;">';
+  const logo = '<img src="' + ADRESSE_IMAGES + 'signature-logo-blanc.png" width="127" height="108" alt="Hygiène &amp; Combat" style="display:block;border:0;width:127px;height:108px;">';
   const ligne = (icone, texte, lien) => '<tr><td style="' + police + 'font-size:15px;line-height:24px;font-weight:bold;color:#1a1a1a;padding-top:6px;">' + icone + '&nbsp;' +
     '<a href="' + e(lien) + '" style="color:#1a1a1a;text-decoration:none;">' + e(texte) + '</a></td></tr>';
   const bouton = (lien, texte, fond, couleur) => '<a href="' + e(lien) + '" style="display:block;' + police + 'font-size:15px;line-height:20px;font-weight:bold;color:' + couleur +
@@ -721,7 +722,9 @@ function signatureHtml(p, lienRdv) {
     '<tr><td style="padding:0 0 18px 0;"><table cellpadding="0" cellspacing="0" border="0" role="presentation" align="center" style="border-collapse:collapse;margin:0 auto;"><tr>' +
       rond(photo) +
       '<td valign="middle" style="padding:0 22px;"><table cellpadding="0" cellspacing="0" border="0" role="presentation">' +
-        '<tr><td style="' + police + 'font-size:19px;line-height:26px;font-weight:bold;color:#1a1a1a;">' + e(p.nom) + '</td></tr>' +
+        '<tr><td style="' + police + 'font-size:19px;line-height:26px;font-weight:bold;color:#1a1a1a;">' + e(p.nom) +
+          // Marque invisible, différente à chaque e-mail : sinon Gmail (surtout sur téléphone) range la signature, identique d'un e-mail à l'autre, derrière « ••• ».
+          (marque ? '<span style="display:none;font-size:0;line-height:0;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">' + e(marque) + '</span>' : '') + '</td></tr>' +
         '<tr><td style="' + police + 'font-size:15px;line-height:22px;color:#777777;padding:4px 0 6px;">Hygiène &amp; Combat' + (p.titre ? ' | ' + e(p.titre) : '') + '</td></tr>' +
         (p.tel ? ligne('📞', p.tel, 'tel:' + tel) : '') +
         ligne('✉️', EMAIL_SIGNATURE, 'mailto:' + EMAIL_SIGNATURE) +
