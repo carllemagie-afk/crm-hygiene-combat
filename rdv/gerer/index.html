@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prendre rendez-vous – Hygiène &amp; Combat</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="https://carllemagie-afk.github.io/crm-hygiene-combat/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<!--
+  Page publique de prise de rendez-vous, publiée avec l'application (GitHub Pages) : …/rdv/ (choix), …/rdv/carl/, …/rdv/matthieu/,
+  …/rdv/gerer/#jeton. Construite par build.py à partir de crm/rdv/RdvStyle.html et RdvScript.html (les mêmes que la page Apps Script).
+  Les appels passent par l'API (fonctions rdvPublic… seulement, sans connexion) : pas de page Apps Script, donc aucun souci
+  quand le navigateur du client est connecté à plusieurs comptes Google.
+-->
+<style>
+/* Pages publiques de prise de rendez-vous – charte Hygiène & Combat (ardoise, bleu acier, DM Sans) */
+:root {
+  --ardoise-900: #1d282e; --ardoise-800: #2a3840; --ardoise-700: #384a54;
+  --acier: #87a6bb; --acier-600: #6c8ea5; --acier-100: #e6eef3; --acier-50: #f2f6f9;
+  --fond: #f5f7f8; --surface: #ffffff; --texte: #121b20; --doux: #5b6a72; --pale: #8e9ba1;
+  --trait: #e3e8eb; --trait-fort: #cfd8dd; --choix: #2a3840; --choix-texte: #ffffff;
+  --ok: #2f8460; --ok-50: #e7f4ee; --danger: #c2413b; --danger-50: #fbecea; --attention-50: #fbf3e4;
+  --r: 12px; --r-l: 16px;
+  --ombre: 0 1px 2px rgba(18,27,32,.05), 0 4px 16px rgba(18,27,32,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fond: #11181c; --surface: #1a2328; --texte: #e8eef1; --doux: #a3b1b8; --pale: #7d8b92;
+    --trait: #2a363c; --trait-fort: #3a4850; --acier-50: #1f2a30; --acier-100: #26343b; --choix: #87a6bb; --choix-texte: #11181c;
+    --ok-50: #16302a; --danger-50: #3a1f1d; --attention-50: #35291a;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--fond); color: var(--texte); -webkit-font-smoothing: antialiased;
+  font: 16px/1.5 "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+button, input, textarea { font: inherit; color: inherit; }
+a { color: inherit; }
+.bandeau { background: linear-gradient(180deg, var(--ardoise-800), var(--ardoise-700)); color: #fff; padding: 18px 16px 70px; }
+.bandeau .marque { max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; font-weight: 600; }
+.page { max-width: 760px; margin: -54px auto 40px; padding: 0 16px; }
+.carte { background: var(--surface); border: 1px solid var(--trait); border-radius: var(--r-l); box-shadow: var(--ombre); padding: 22px; margin-bottom: 16px; }
+.profil { display: flex; gap: 16px; align-items: center; }
+.avatar { width: 64px; height: 64px; border-radius: 50%; flex: none; object-fit: cover; background: var(--acier-100); color: var(--texte);
+  display: grid; place-items: center; font-weight: 700; font-size: 22px; }
+h1 { font-size: 22px; margin: 0; letter-spacing: -.01em; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+.doux { color: var(--doux); } .pale { color: var(--pale); } .petit { font-size: 14px; }
+.puces { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.puce { font-size: 13px; padding: 3px 10px; border-radius: 99px; background: var(--acier-50); border: 1px solid var(--trait); color: var(--doux); }
+.etape { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--pale); margin-bottom: 10px; }
+
+/* Jours et créneaux */
+.jours { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.jour { border: 1px solid var(--trait); background: var(--surface); border-radius: 10px; padding: 8px 2px; text-align: center; cursor: pointer; line-height: 1.25; }
+.jour b { display: block; font-size: 18px; }
+.jour span { display: block; font-size: 11px; color: var(--doux); text-transform: uppercase; letter-spacing: .06em; }
+.jour small { display: block; font-size: 11px; color: var(--pale); margin-top: 2px; }
+.jour:disabled { opacity: .38; cursor: default; }
+.jour[aria-pressed="true"] { background: var(--choix); color: var(--choix-texte); border-color: var(--choix); }
+.jour[aria-pressed="true"] span, .jour[aria-pressed="true"] small { color: inherit; opacity: .85; }
+.nav-jours { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; }
+.creneaux { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; margin-top: 14px; }
+.creneau { border: 1px solid var(--trait-fort); background: var(--surface); border-radius: 10px; padding: 10px 0; font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums; }
+.creneau:hover { border-color: var(--acier-600); }
+.creneau[aria-pressed="true"] { background: var(--choix); color: var(--choix-texte); border-color: var(--choix); }
+
+/* Formulaire */
+.grille { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .grille { grid-template-columns: 1fr; } .jours { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+label.champ { display: block; margin-bottom: 12px; }
+label.champ span { display: block; font-size: 13px; font-weight: 600; color: var(--doux); margin-bottom: 4px; }
+input[type=text], input[type=email], input[type=tel], textarea { width: 100%; border: 1px solid var(--trait-fort); background: var(--surface); border-radius: 10px; padding: 10px 12px; }
+textarea { min-height: 84px; resize: vertical; }
+input:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--acier-600); outline-offset: 1px; }
+.modes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.modes label { flex: 1; min-width: 150px; border: 1px solid var(--trait-fort); border-radius: 10px; padding: 10px 12px; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+.modes label:has(input:checked) { border-color: var(--choix); box-shadow: inset 0 0 0 1px var(--choix); }
+.piege { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.recap { background: var(--acier-50); border: 1px solid var(--trait); border-radius: var(--r); padding: 12px 14px; margin-bottom: 14px; }
+.btn { border: 1px solid var(--trait-fort); background: var(--surface); border-radius: 10px; padding: 10px 16px; font-weight: 600; cursor: pointer; }
+.btn.principal { background: var(--ardoise-800); color: #fff; border-color: var(--ardoise-800); }
+.btn.danger { color: var(--danger); }
+.btn:disabled { opacity: .55; cursor: default; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
+.message { border-radius: var(--r); padding: 12px 14px; margin-bottom: 14px; }
+.message.erreur { background: var(--danger-50); color: var(--danger); }
+.message.ok { background: var(--ok-50); color: var(--ok); }
+.message.info { background: var(--attention-50); }
+.vide { text-align: center; color: var(--doux); padding: 18px 0; }
+.choix-personnes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 560px) { .choix-personnes { grid-template-columns: 1fr; } }
+.personne { display: flex; gap: 14px; align-items: center; text-decoration: none; border: 1px solid var(--trait); border-radius: var(--r-l); padding: 16px; background: var(--surface); }
+.personne:hover { border-color: var(--acier-600); }
+.chargement { color: var(--pale); padding: 16px 0; text-align: center; }
+dl.details { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 14px; }
+dl.details dt { color: var(--doux); font-size: 14px; } dl.details dd { margin: 0; font-weight: 500; overflow-wrap: anywhere; }
+footer { text-align: center; color: var(--pale); font-size: 13px; padding: 10px 16px 30px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header class="bandeau"><div class="marque">Hygiène &amp; Combat</div></header>
+<main class="page" id="app"><div class="carte"><div class="chargement">Chargement…</div></div></main>
+<footer>Hygiène &amp; Combat · <a href="mailto:contact@hygiene-combat.fr">contact@hygiene-combat.fr</a></footer>
+<script>
+(function () {
+  const API = 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec';
+  const BASE = 'https://carllemagie-afk.github.io/crm-hygiene-combat/rdv/';
+
+  function appeler(fn, args) {
+    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn, args }) })
+      .then(r => r.json())
+      .then(d => { if (!d.ok) throw new Error(d.erreur || 'Erreur inconnue'); return d.r; });
+  }
+  // Même interface que google.script.run / google.script.url dans la page Apps Script : le script de la page reste identique.
+  function coureur(ok, ko) {
+    return new Proxy({}, { get: (_, nom) => nom === 'withSuccessHandler' ? f => coureur(f, ko) : nom === 'withFailureHandler' ? f => coureur(ok, f)
+      : (...args) => appeler(nom, args).then(r => ok && ok(r), e => ko && ko(e)) });
+  }
+  window.google = { script: { run: coureur(null, null), url: { getLocation: cb => cb({ hash: location.hash.slice(1), parameter: {} }) } } };
+
+  // Page demandée : …/rdv/ (choix), …/rdv/carl/, …/rdv/gerer/#jeton ou …/rdv/?p=carl
+  const id = (new URLSearchParams(location.search).get('p') || (location.pathname.split('/rdv/')[1] || '').split('/')[0] || '').toLowerCase();
+  window.RDV = { page: 'choix', base: BASE, intervenant: '', profil: null, personnes: [] };
+  if (id === 'gerer') {
+    RDV.page = 'gerer';
+    document.title = 'Mon rendez-vous – Hygiène & Combat';
+    return lancerRdv();
+  }
+  appeler('rdvPublicIntervenants', []).then(personnes => {
+    if (!id) RDV.personnes = personnes;
+    else {
+      const p = personnes.find(x => x.id === id);
+      if (p) Object.assign(RDV, { page: 'reserver', intervenant: p.id, profil: p });
+      else RDV.page = 'introuvable';
+      if (p) document.title = 'Rendez-vous avec ' + p.prenom + ' – Hygiène & Combat';
+    }
+    lancerRdv();
+  }, () => {
+    document.getElementById('app').innerHTML = '<div class="carte"><div class="message erreur" role="alert">Connexion impossible. Vérifiez votre connexion internet puis rechargez la page.</div></div>';
+  });
+})();
+
+function lancerRdv() {
+/**
+ * Pages publiques de prise de rendez-vous, servies par l'application web Apps Script (Rdv.gs › rdvPageWeb_).
+ * Le client n'a besoin ni de connexion ni de compte Google. Les appels au serveur passent par google.script.run
+ * (fonctions rdvPublic… uniquement) et ne renvoient que des heures libres ou son propre rendez-vous.
+ * window.RDV = { page: 'choix' | 'reserver' | 'gerer' | 'introuvable', base, intervenant, profil, personnes }
+ */
+(function () {
+  const R = window.RDV || {};
+  const $ = s => document.querySelector(s);
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const cleAleatoire = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)).replace(/[^A-Za-z0-9-]/g, '');
+  const JOURS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
+  const JOURS_LONGS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+  const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  const dateDe = jour => { const [a, m, j] = jour.split('-').map(Number); return new Date(Date.UTC(a, m - 1, j)); };
+  const libelleJour = jour => { const d = dateDe(jour); return JOURS_LONGS[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + MOIS[d.getUTCMonth()]; };
+  const lienPersonne = id => R.base + encodeURIComponent(id) + '/';
+
+  /** Appel au serveur Apps Script. Une coupure réseau est signalée comme telle : on ne sait pas si la demande est arrivée. */
+  function api(fn, ...args) {
+    return new Promise((ok, ko) => {
+      google.script.run.withSuccessHandler(ok).withFailureHandler(e => {
+        const msg = String((e && e.message) || e || 'Erreur inconnue');
+        const reseau = /network|réseau|failed to fetch|timeout|NetworkError/i.test(msg) && !/rendez-vous|créneau/i.test(msg);
+        ko(Object.assign(new Error(reseau ? 'Connexion impossible. Vérifiez votre connexion internet puis réessayez.' : msg), { reseau }));
+      })[fn](...args);
+    });
+  }
+
+  const avatar = p => p && p.photo
+    ? '<img class="avatar" src="' + esc(p.photo) + '" alt="">'
+    : '<div class="avatar" aria-hidden="true">' + esc(String((p && p.nom) || '?').split(/\s+/).slice(0, 2).map(m => m[0] || '').join('').toUpperCase()) + '</div>';
+  const message = (el, type, texte) => { el.innerHTML = texte ? '<div class="message ' + type + '" role="' + (type === 'erreur' ? 'alert' : 'status') + '">' + texte + '</div>' : ''; };
+  const occupe = (btn, texte) => { btn.disabled = true; btn.dataset.texte = btn.textContent; btn.textContent = texte; };
+  const libre = btn => { btn.disabled = false; if (btn.dataset.texte) btn.textContent = btn.dataset.texte; };
+  const estPris = e => /vient d’être pris|plus disponible/.test(e.message);
+  const puces = p => '<div class="puces"><span class="puce">' + p.duree + ' min</span>' + p.modes.map(m => '<span class="puce">' + (m === 'Téléphone' ? '📞 ' : '🎥 ') + esc(m) + '</span>').join('') + '<span class="puce">Heure de Paris</span></div>';
+
+  /** Sélecteur de créneau : jours (7 par 7) puis heures libres. options : { intervenant, jeton, surChoix(creneau, jour) } */
+  function selecteur(conteneur, options) {
+    const etat = { du: '', pages: [], donnees: null, jour: '', choix: null };
+    conteneur.innerHTML = '<div class="nav-jours"><button class="btn" type="button" data-prec disabled>‹ Précédent</button>' +
+      '<span class="doux petit" data-titre></span><button class="btn" type="button" data-suiv disabled>Suivant ›</button></div>' +
+      '<div class="jours" data-jours><div class="chargement" style="grid-column:1/-1">Chargement des disponibilités…</div></div><div data-creneaux></div><div data-msg></div>';
+    const q = s => conteneur.querySelector(s);
+    function charger(du) {
+      return api('rdvPublicCreneaux', options.intervenant || '', du, 7, options.jeton || '').then(d => {
+        etat.donnees = d;
+        etat.du = du;
+        const premierLibre = d.jours.find(j => j.creneaux.length);
+        etat.jour = premierLibre ? premierLibre.jour : '';
+        dessiner();
+        if (!premierLibre && d.suivant && etat.pages.length < 8) { etat.pages.push(du); return charger(d.suivant); }
+      }).catch(e => message(q('[data-msg]'), 'erreur', esc(e.message)));
+    }
+    function dessiner() {
+      const d = etat.donnees;
+      const premier = d.jours[0], dernier = d.jours[d.jours.length - 1];
+      q('[data-titre]').textContent = premier ? dateDe(premier.jour).getUTCDate() + ' ' + MOIS[dateDe(premier.jour).getUTCMonth()] + ' – ' +
+        dateDe(dernier.jour).getUTCDate() + ' ' + MOIS[dateDe(dernier.jour).getUTCMonth()] : '';
+      q('[data-prec]').disabled = !etat.pages.length;
+      q('[data-suiv]').disabled = !d.suivant;
+      q('[data-jours]').innerHTML = d.jours.length ? d.jours.map(j => {
+        const dt = dateDe(j.jour);
+        return '<button type="button" class="jour" data-jour="' + j.jour + '" aria-pressed="' + (j.jour === etat.jour) + '"' + (j.creneaux.length ? '' : ' disabled') + '>' +
+          '<span>' + JOURS[dt.getUTCDay()] + '</span><b>' + dt.getUTCDate() + '</b><small>' + (j.creneaux.length ? j.creneaux.length + ' libre' + (j.creneaux.length > 1 ? 's' : '') : 'complet') + '</small></button>';
+      }).join('') : '<div class="vide" style="grid-column:1/-1">Aucune disponibilité sur cette période.</div>';
+      conteneur.querySelectorAll('[data-jour]').forEach(b => b.onclick = () => { etat.jour = b.dataset.jour; etat.choix = null; dessiner(); });
+      const jour = d.jours.find(j => j.jour === etat.jour);
+      q('[data-creneaux]').innerHTML = jour
+        ? '<div class="creneaux" role="group" aria-label="Heures disponibles">' + jour.creneaux.map(c => '<button type="button" class="creneau" data-iso="' + c.iso + '" aria-pressed="' +
+          (etat.choix === c.iso) + '">' + c.h + '</button>').join('') + '</div><p class="pale petit" style="margin:10px 0 0">Heures de Paris · rendez-vous de ' + d.profil.duree + ' min</p>'
+        : (d.jours.some(j => j.creneaux.length) ? '' : '<div class="vide">Aucun créneau libre ces jours-ci : essayez la période suivante.</div>');
+      conteneur.querySelectorAll('[data-iso]').forEach(b => b.onclick = () => {
+        etat.choix = b.dataset.iso;
+        dessiner();
+        options.surChoix(jour.creneaux.find(x => x.iso === etat.choix), jour.jour);
+      });
+    }
+    q('[data-suiv]').onclick = () => { etat.pages.push(etat.du); etat.choix = null; charger(etat.donnees.suivant); };
+    q('[data-prec]').onclick = () => { etat.choix = null; charger(etat.pages.pop()); };
+    charger('');
+    return { recharger: () => { etat.choix = null; return charger(etat.du); }, message: (t, x) => message(q('[data-msg]'), t, x) };
+  }
+
+  // ------------------------------------------------------------------ Choix de la personne (…/rdv)
+  function pageChoix() {
+    $('#app').innerHTML = '<div class="carte"><h1>Prendre rendez-vous</h1><p class="doux">Choisissez la personne avec qui vous souhaitez échanger.</p>' +
+      (R.personnes.length ? '<div class="choix-personnes">' + R.personnes.map(p => '<a class="personne" href="' + esc(lienPersonne(p.id)) + '">' + avatar(p) +
+        '<div><b>' + esc(p.nom) + '</b><div class="doux petit">' + esc(p.titre || 'Hygiène & Combat') + '</div><div class="pale petit">Rendez-vous de ' + p.duree + ' min</div></div></a>').join('') + '</div>'
+        : '<div class="message info">La prise de rendez-vous en ligne n’est pas encore ouverte. Écrivez-nous à contact@hygiene-combat.fr.</div>') + '</div>';
+  }
+
+  // ------------------------------------------------------------------ Réservation (…/rdv/matthieu, …/rdv/carl)
+  function pageReserver() {
+    const p = R.profil;
+    $('#app').innerHTML =
+      '<div class="carte"><div class="profil">' + avatar(p) + '<div><h1>Rendez-vous avec ' + esc(p.nom) + '</h1><div class="doux">' + esc(p.titre ? p.titre + ' · ' : '') + 'Hygiène &amp; Combat</div>' + puces(p) + '</div></div></div>' +
+      '<div id="etapes"><section class="carte"><div class="etape">1 · Choisissez un créneau</div><div id="selecteur"></div></section>' +
+      '<form class="carte" id="formulaire" hidden><div class="etape">2 · Vos coordonnées</div><div class="recap">Créneau choisi : <b id="choisi"></b></div>' +
+        '<div class="modes">' + p.modes.map((m, i) => '<label><input type="radio" name="mode" value="' + esc(m) + '"' + (i === 0 ? ' checked' : '') + '> ' + (m === 'Téléphone' ? '📞 Par téléphone' : '🎥 En visio Google Meet') + '</label>').join('') + '</div>' +
+        '<div class="grille">' +
+          '<label class="champ"><span>Prénom</span><input type="text" name="prenom" required maxlength="80" autocomplete="given-name"></label>' +
+          '<label class="champ"><span>Nom</span><input type="text" name="nom" required maxlength="80" autocomplete="family-name"></label>' +
+          '<label class="champ"><span>Entreprise / club</span><input type="text" name="entreprise" required maxlength="120" autocomplete="organization"></label>' +
+          '<label class="champ"><span>E-mail</span><input type="email" name="email" required maxlength="160" autocomplete="email"></label>' +
+          '<label class="champ"><span>Téléphone <small class="pale" id="telAide">(facultatif)</small></span><input type="tel" name="telephone" maxlength="30" autocomplete="tel"></label>' +
+        '</div>' +
+        '<label class="champ"><span>Motif <small class="pale">(facultatif)</small></span><textarea name="motif" maxlength="1000" placeholder="En quelques mots, ce dont vous souhaitez parler"></textarea></label>' +
+        '<div class="piege" aria-hidden="true"><label>Site web<input type="text" name="site" tabindex="-1" autocomplete="off"></label></div>' +
+        '<div id="msg"></div>' +
+        '<p class="pale petit">Vos coordonnées servent uniquement à organiser ce rendez-vous et à vous recontacter. Vous recevrez un e-mail de confirmation avec un lien pour annuler ou déplacer.</p>' +
+        '<div class="actions"><button class="btn principal" id="confirmer" type="submit">Confirmer le rendez-vous</button></div></form></div>' +
+      '<section class="carte" id="succes" hidden aria-live="polite"></section>';
+    let creneau = null, cle = '';
+    const form = $('#formulaire');
+    const majTel = () => {
+      const mode = (form.querySelector('[name=mode]:checked') || {}).value;
+      form.querySelector('[name=telephone]').required = mode === 'Téléphone';
+      $('#telAide').textContent = mode === 'Téléphone' ? '(pour vous appeler)' : '(facultatif)';
+    };
+    form.querySelectorAll('[name=mode]').forEach(r => r.onchange = majTel);
+    majTel();
+    const sel = selecteur($('#selecteur'), {
+      intervenant: R.intervenant,
+      surChoix: (c, jour) => {
+        creneau = c;
+        cle = cleAleatoire(); // une clé par demande : un nouvel essai après une coupure ne crée pas de doublon
+        $('#choisi').textContent = libelleJour(jour) + ' à ' + c.h;
+        form.hidden = false;
+        message($('#msg'), '', '');
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      },
+    });
+    form.onsubmit = e => {
+      e.preventDefault();
+      if (!creneau) return;
+      const f = new FormData(form);
+      const btn = $('#confirmer');
+      occupe(btn, 'Confirmation…');
+      message($('#msg'), '', '');
+      api('rdvPublicReserver', {
+        intervenant: R.intervenant, debut: creneau.iso, cle, site: f.get('site') || '',
+        prenom: f.get('prenom'), nom: f.get('nom'), entreprise: f.get('entreprise'), email: f.get('email'), telephone: f.get('telephone'), motif: f.get('motif'), mode: f.get('mode'),
+      }).then(r => {
+        $('#etapes').hidden = true;
+        $('#succes').hidden = false;
+        $('#succes').innerHTML = '<div class="message ok" role="status"><b>Votre rendez-vous est confirmé.</b></div>' +
+          '<dl class="details"><dt>Avec</dt><dd>' + esc(r.intervenant.nom) + '</dd><dt>Quand</dt><dd>' + esc(r.libelle) + ' – ' + esc(r.heureFin) + ' (heure de Paris)</dd>' +
+          '<dt>Comment</dt><dd>' + (r.mode === 'Téléphone' ? '📞 ' + esc(r.intervenant.prenom) + ' vous appellera.' : '🎥 Google Meet' + (r.meet ? ' : <a href="' + esc(r.meet) + '">' + esc(r.meet) + '</a>' : ' (lien envoyé avant le rendez-vous)')) + '</dd></dl>' +
+          '<p class="doux">' + (r.mailEnvoye ? 'Un e-mail récapitulatif vient de vous être envoyé.' : 'L’e-mail récapitulatif va vous être envoyé dans quelques minutes.') +
+          ' Gardez ce lien pour annuler ou déplacer le rendez-vous :</p><p><a class="btn" href="' + esc(r.gestion) + '">Gérer mon rendez-vous</a></p>';
+        $('#succes').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }).catch(err => {
+        libre(btn);
+        if (estPris(err)) {
+          form.hidden = true;
+          creneau = null;
+          sel.recharger().then(() => sel.message('erreur', esc(err.message)));
+          $('#selecteur').scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+        message($('#msg'), 'erreur', esc(err.message) + (err.reseau ? '<br>Vous pouvez cliquer à nouveau sur « Confirmer » : aucun doublon ne sera créé.' : ''));
+      });
+    };
+  }
+
+  // ------------------------------------------------------------------ Gestion (…/rdv/gerer#jeton)
+  function pageGerer(jeton) {
+    const zone = $('#app');
+    zone.innerHTML = '<div class="carte" id="gestion"><div class="chargement">Chargement de votre rendez-vous…</div></div>';
+    const carte = $('#gestion');
+    if (!jeton) { carte.innerHTML = '<div class="message erreur">Lien incomplet : utilisez le lien reçu par e-mail.</div>'; return; }
+    const afficher = (r, info) => {
+      const actif = r.statut === 'Confirmé';
+      carte.innerHTML = '<div class="profil" style="margin-bottom:16px">' + avatar(r.intervenant) + '<div><h1>Votre rendez-vous</h1><div class="doux">avec ' + esc(r.intervenant.nom) + ' · Hygiène &amp; Combat</div></div></div>' +
+        (info ? '<div class="message ok" role="status">' + info + '</div>' : '') +
+        (actif ? '' : '<div class="message ' + (r.statut === 'Annulé' ? 'info' : 'erreur') + '">Ce rendez-vous est ' + esc(r.statut.toLowerCase()) + '.</div>') +
+        '<dl class="details"><dt>Quand</dt><dd>' + esc(r.libelle) + ' – ' + esc(r.heureFin) + ' (heure de Paris)</dd><dt>Comment</dt><dd>' +
+        (r.mode === 'Téléphone' ? '📞 Par téléphone' : '🎥 Google Meet' + (r.meet ? ' : <a href="' + esc(r.meet) + '">' + esc(r.meet) + '</a>' : '')) + '</dd></dl>' +
+        '<div data-msg></div>' +
+        (r.modifiable ? '<div class="actions"><button class="btn danger" id="annuler">Annuler le rendez-vous</button><button class="btn principal" id="deplacer">Déplacer</button></div>' :
+          (r.statut === 'Annulé' && r.intervenant.id ? '<div class="actions"><a class="btn principal" href="' + esc(lienPersonne(r.intervenant.id)) + '">Reprendre un rendez-vous</a></div>' : '')) +
+        '<div id="nouveau" hidden style="margin-top:18px"><div class="etape">Choisissez un nouveau créneau</div><div id="selecteur"></div>' +
+        '<div id="confirmDep" hidden class="recap" style="margin-top:14px"><b>Nouveau créneau : <span id="depChoisi"></span></b><div class="actions" style="margin-top:10px"><button class="btn principal" id="depOk">Confirmer le déplacement</button></div></div></div>';
+      if (!r.modifiable) return;
+      const msg = carte.querySelector('[data-msg]');
+      // Annulation en deux clics (pas de fenêtre « confirm », bloquée dans la page Apps Script)
+      $('#annuler').onclick = () => {
+        const b = $('#annuler');
+        if (!b.dataset.sur) { b.dataset.sur = '1'; b.textContent = 'Confirmer l’annulation'; return; }
+        occupe(b, 'Annulation…');
+        api('rdvPublicAnnuler', jeton).then(x => afficher(x, 'Rendez-vous annulé. Un e-mail de confirmation vous est envoyé.'))
+          .catch(e => { libre(b); message(msg, 'erreur', esc(e.message)); });
+      };
+      $('#deplacer').onclick = () => {
+        $('#nouveau').hidden = false;
+        $('#deplacer').disabled = true;
+        let choix = null, cle = '';
+        const sel = selecteur($('#selecteur'), {
+          jeton,
+          surChoix: (c, jour) => { choix = c; cle = cleAleatoire(); $('#depChoisi').textContent = libelleJour(jour) + ' à ' + c.h; $('#confirmDep').hidden = false; },
+        });
+        $('#depOk').onclick = () => {
+          if (!choix) return;
+          occupe($('#depOk'), 'Déplacement…');
+          api('rdvPublicDeplacer', jeton, choix.iso, cle).then(x => afficher(x, 'Rendez-vous déplacé. Un e-mail récapitulatif vous est envoyé.'))
+            .catch(e => {
+              libre($('#depOk'));
+              if (estPris(e)) { $('#confirmDep').hidden = true; sel.recharger().then(() => sel.message('erreur', esc(e.message))); return; }
+              message(msg, 'erreur', esc(e.message));
+            });
+        };
+      };
+    };
+    api('rdvPublicLire', jeton).then(r => afficher(r)).catch(e => { carte.innerHTML = '<div class="message erreur">' + esc(e.message) + '</div>'; });
+  }
+
+  if (R.page === 'choix') pageChoix();
+  if (R.page === 'reserver') pageReserver();
+  if (R.page === 'introuvable') $('#app').innerHTML = '<div class="carte"><h1>Page introuvable</h1><p class="doux">Cette page de rendez-vous n’existe pas. <a href="' + esc(R.base) + '">Voir les personnes disponibles</a></p></div>';
+  // Le jeton est dans l'ancre (#…) de l'adresse : la page Apps Script la lit avec google.script.url.
+  if (R.page === 'gerer') google.script.url.getLocation(loc => pageGerer(decodeURIComponent(String((loc && loc.hash) || '').replace(/^#/, ''))));
+})();
+}
+</script>
+</body>
+</html>
