@@ -587,7 +587,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.30-0341';
+const VERSION_APP = '2026.10.30-0347';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -709,27 +709,31 @@ function signatureHtml(p, lienRdv, marque) {
   const police = 'font-family:Arial,Helvetica,sans-serif;';
   const tel = telInternational(p.tel);
   const initiales = p.nom.split(/\s+/).slice(0, 2).map(m => m[0] || '').join('').toUpperCase();
-  const rond = (contenu, l = 108) => '<td width="' + l + '" valign="middle" style="width:' + l + 'px;">' + contenu + '</td>';
+  const rond = (contenu, l, classe) => '<td class="' + classe + '" width="' + l + '" valign="middle" style="width:' + l + 'px;">' + contenu + '</td>';
+  // Téléphone (Gmail, Apple Mail) : cercles et logo plus petits, pour que la signature tienne dans la largeur de l'écran.
+  const styleTelephone = '<style>@media screen and (max-width:480px){.hc-case{width:72px!important}.hc-photo{width:72px!important;height:72px!important;border-radius:36px!important;line-height:72px!important;font-size:26px!important}' +
+    '.hc-casel{width:74px!important}.hc-logo{width:74px!important;height:63px!important}.hc-texte{padding:0 10px!important}.hc-nom{font-size:16px!important;line-height:21px!important}' +
+    '.hc-petit{font-size:13px!important;line-height:19px!important}}</style>';
   const photo = p.photo
-    ? '<img src="' + e(p.photo) + '" width="108" height="108" alt="' + e(p.nom) + '" style="display:block;border:0;width:108px;height:108px;border-radius:54px;">'
-    : '<div style="width:108px;height:108px;border-radius:54px;background-color:#afdbfc;text-align:center;' + police + 'font-size:36px;line-height:108px;font-weight:bold;color:#1a1a1a;">' + e(initiales) + '</div>';
-  const logo = '<img src="' + ADRESSE_IMAGES + 'signature-logo-blanc.png" width="127" height="108" alt="Hygiène &amp; Combat" style="display:block;border:0;width:127px;height:108px;">';
-  const ligne = (icone, texte, lien) => '<tr><td style="' + police + 'font-size:15px;line-height:24px;font-weight:bold;color:#1a1a1a;padding-top:6px;">' + icone + '&nbsp;' +
+    ? '<img src="' + e(p.photo) + '" class="hc-photo" width="108" height="108" alt="' + e(p.nom) + '" style="display:block;border:0;width:108px;height:108px;border-radius:54px;">'
+    : '<div class="hc-photo" style="width:108px;height:108px;border-radius:54px;background-color:#afdbfc;text-align:center;' + police + 'font-size:36px;line-height:108px;font-weight:bold;color:#1a1a1a;">' + e(initiales) + '</div>';
+  const logo = '<img src="' + ADRESSE_IMAGES + 'signature-logo-blanc.png" class="hc-logo" width="127" height="108" alt="Hygiène &amp; Combat" style="display:block;border:0;width:127px;height:108px;">';
+  const ligne = (icone, texte, lien) => '<tr><td class="hc-petit" style="' + police + 'font-size:15px;line-height:24px;font-weight:bold;color:#1a1a1a;padding-top:6px;white-space:nowrap;">' + icone + '&nbsp;' +
     '<a href="' + e(lien) + '" style="color:#1a1a1a;text-decoration:none;">' + e(texte) + '</a></td></tr>';
   const bouton = (lien, texte, fond, couleur) => '<a href="' + e(lien) + '" style="display:block;' + police + 'font-size:15px;line-height:20px;font-weight:bold;color:' + couleur +
     ';background-color:' + fond + ';text-decoration:none;text-align:center;padding:9px 12px;border-radius:6px;">' + texte + '</a>';
-  return '<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;width:100%;max-width:600px;margin-top:18px;">' +
+  return styleTelephone + '<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;width:100%;max-width:600px;margin-top:18px;">' +
     '<tr><td style="padding:0 0 18px 0;"><table cellpadding="0" cellspacing="0" border="0" role="presentation" align="center" style="border-collapse:collapse;margin:0 auto;"><tr>' +
-      rond(photo) +
-      '<td valign="middle" style="padding:0 22px;"><table cellpadding="0" cellspacing="0" border="0" role="presentation">' +
-        '<tr><td style="' + police + 'font-size:19px;line-height:26px;font-weight:bold;color:#1a1a1a;">' + e(p.nom) +
+      rond(photo, 108, 'hc-case') +
+      '<td class="hc-texte" valign="middle" style="padding:0 22px;"><table cellpadding="0" cellspacing="0" border="0" role="presentation">' +
+        '<tr><td class="hc-nom" style="' + police + 'font-size:19px;line-height:26px;font-weight:bold;color:#1a1a1a;">' + e(p.nom) +
           // Marque invisible, différente à chaque e-mail : sinon Gmail (surtout sur téléphone) range la signature, identique d'un e-mail à l'autre, derrière « ••• ».
           (marque ? '<span style="display:none;font-size:0;line-height:0;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">' + e(marque) + '</span>' : '') + '</td></tr>' +
-        '<tr><td style="' + police + 'font-size:15px;line-height:22px;color:#777777;padding:4px 0 6px;">Hygiène &amp; Combat' + (p.titre ? ' | ' + e(p.titre) : '') + '</td></tr>' +
+        '<tr><td class="hc-petit" style="' + police + 'font-size:15px;line-height:22px;color:#777777;padding:4px 0 6px;">Hygiène &amp; Combat' + (p.titre ? ' | ' + e(p.titre) : '') + '</td></tr>' +
         (p.tel ? ligne('📞', p.tel, 'tel:' + tel) : '') +
         ligne('✉️', EMAIL_SIGNATURE, 'mailto:' + EMAIL_SIGNATURE) +
       '</table></td>' +
-      rond(logo, 127) +
+      rond(logo, 127, 'hc-casel') +
     '</tr></table></td></tr>' +
     '<tr><td style="border-top:1px solid #212024;padding-top:16px;"><table cellpadding="0" cellspacing="0" border="0" role="presentation" width="100%" style="border-collapse:collapse;"><tr>' +
       '<td width="50%" style="padding-right:6px;">' + (tel ? bouton('tel:' + tel, '📱 Appeler', '#5c8edc', '#ffffff') : '') + '</td>' +
