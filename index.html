@@ -243,6 +243,23 @@
   .comparateur-plein header b { font-size: 14px; } .comparateur-plein header span { color: var(--acier); font-size: 12.5px; }
   .comparateur-plein header .btn { margin-left: auto; background: rgba(255,255,255,.12); color: #fff; border-color: transparent; }
   .comparateur-plein iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+  .planning { padding: 14px; }
+  .pl-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .pl-nav b { flex: 1; text-align: center; font-size: 14.5px; min-width: 150px; }
+  .pl-tete, .pl-corps { display: grid; grid-template-columns: 40px repeat(7, minmax(0, 1fr)); }
+  .pl-tete span { font-size: 12px; font-weight: 600; color: var(--doux); text-align: center; padding: 4px 0 8px; text-transform: capitalize; }
+  .pl-tete .pl-auj-t { color: var(--texte); }
+  .pl-heures span { display: block; font-size: 11px; color: var(--pale, #9aa7af); text-align: right; padding-right: 6px; transform: translateY(-7px); }
+  .pl-col { position: relative; border-left: 1px solid var(--trait); background-image: linear-gradient(var(--trait) 1px, transparent 1px); background-size: 100% 44px; }
+  .pl-auj { background-color: #f5f9fc; }
+  .pl-ev { position: absolute; left: 3px; right: 3px; overflow: hidden; border-radius: 6px; padding: 2px 5px; font-size: 11.5px; line-height: 1.25; color: var(--texte); text-decoration: none;
+    background: color-mix(in srgb, var(--c) 16%, #fff); border-left: 3px solid var(--c); }
+  .pl-ev b { font-weight: 700; }
+  .pl-liste { display: none; }
+  .pl-ligne { display: flex; align-items: center; gap: 10px; padding: 9px 10px; margin: 4px 0; border-radius: 10px; text-decoration: none; color: var(--texte); background: color-mix(in srgb, var(--c) 10%, #fff); border-left: 3px solid var(--c); }
+  .pl-ligne .pl-nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pastille-pl { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  @media (max-width: 760px) { .pl-grille { display: none; } .pl-liste { display: block; } }
   .cadre-outil { display: block; width: 100%; min-height: 70vh; border: 0; border-radius: var(--rayon, 14px); background: #fff; }
   .piece-jointe { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--acier-50); border: 1px solid var(--trait); font-size: 13px; margin: 0 0 10px; }
   .piece-jointe.manque { background: var(--attention-50); border-color: #ecd3a8; color: var(--attention); }
@@ -587,7 +604,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.30-0347';
+const VERSION_APP = '2026.10.30-0403';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -2334,7 +2351,8 @@ function fenetreRdv(c) {
 
 function pageAgenda() {
   const maintenant = new Date();
-  const visibles = S.d.rdv.filter(r => (S.agendaEquipe || r.Owner === S.moi) && !['Échec', 'En cours'].includes(r.Statut));
+  const qui = S.agendaQui || S.moi; // une personne, ou « tous »
+  const visibles = S.d.rdv.filter(r => (qui === 'tous' || r.Owner === qui) && !['Échec', 'En cours'].includes(r.Statut));
   const actifs = visibles.filter(r => r.Statut !== 'Annulé');
   const avenir = actifs.filter(r => new Date(r.Fin || r['Début']) >= maintenant).sort((a, b) => String(a['Début']).localeCompare(String(b['Début'])));
   const passes = actifs.filter(r => new Date(r.Fin || r['Début']) < maintenant).sort((a, b) => String(b['Début']).localeCompare(String(a['Début']))).slice(0, 10);
@@ -2345,18 +2363,22 @@ function pageAgenda() {
     liste.forEach(r => { const k = new Date(r['Début']).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }); (jours[k] = jours[k] || []).push(r); });
     return Object.keys(jours).map(j => '<div class="groupe etiquette">' + esc(j) + '</div>' + jours[j].map(ligneRdv).join('')).join('');
   };
-  $('#page').innerHTML = '<div class="page"><div class="entete"><div><h1>Agenda</h1><p>' + avenir.length + ' rendez-vous à venir' + (S.agendaEquipe ? ' pour l’équipe' : '') + '</p></div>' +
+  const choixQui = S.d.owners.map(o => [o, o.split(/\s+/)[0]]).concat([['tous', 'Les deux']]);
+  $('#page').innerHTML = '<div class="page"><div class="entete"><div><h1>Agenda</h1><p>' + avenir.length + ' rendez-vous à venir' + (qui === 'tous' ? ' pour l’équipe' : qui === S.moi ? '' : ' pour ' + esc(qui.split(/\s+/)[0])) + '</p></div>' +
     '<button class="btn principal" id="rNouv">' + ico('plus') + 'Nouveau rendez-vous</button></div>' +
-    '<div class="rangee" style="margin-bottom:14px;justify-content:space-between"><div class="segment"><button id="aMoi" class="' + (S.agendaEquipe ? '' : 'actif') + '">Mes rendez-vous</button>' +
-      '<button id="aEquipe" class="' + (S.agendaEquipe ? 'actif' : '') + '">Toute l’équipe</button></div>' +
+    '<div class="rangee" style="margin-bottom:14px;justify-content:space-between"><div class="segment">' +
+      choixQui.map(([v, n]) => '<button data-qui="' + esc(v) + '" class="' + (v === qui ? 'actif' : '') + '">' + (v === 'tous' ? '' : '<i class="pastille-pl" style="background:' + couleurPlanning(v) + '"></i>') + esc(n) + '</button>').join('') + '</div>' +
       (monLien ? '<button class="btn mini" id="aLien" title="' + esc(monLien) + '">' + ico('rdv') + 'Copier mon lien de réservation</button>' : '<a href="#" class="pale petit" id="aConfig">Activer ma page de réservation</a>') + '</div>' +
+    planning(actifs) +
+    '<div class="etiquette" style="margin:22px 0 10px">Prochains rendez-vous</div>' +
     '<div class="carte" style="margin-bottom:16px">' + (avenir.length ? parJour(avenir) : '<div class="vide">' + ico('agenda') + '<b>Aucun rendez-vous prévu</b>Planifiez-en un depuis une fiche client.</div>') + '</div>' +
     (annules.length ? '<div class="etiquette" style="margin:22px 0 10px">Annulés</div><div class="carte">' + annules.map(ligneRdv).join('') + '</div>' : '') +
     (passes.length ? '<div class="etiquette" style="margin:22px 0 10px">Passés</div><div class="carte">' + passes.map(ligneRdv).join('') + '</div>' : '') +
     '<p class="pale petit" style="margin-top:16px">Chaque personne a son agenda Google (secondaire, dans le compte contact@) : affichez-le dans l’appli Google Agenda de votre téléphone pour les notifications.</p></div>';
   $('#rNouv').onclick = () => fenetreRdv(null);
-  $('#aMoi').onclick = () => { S.agendaEquipe = false; pageAgenda(); };
-  $('#aEquipe').onclick = () => { S.agendaEquipe = true; pageAgenda(); };
+  $$('[data-qui]').forEach(b => b.onclick = () => { S.agendaQui = b.dataset.qui; pageAgenda(); });
+  $$('.pl-ev, .pl-ligne').forEach(a => a.addEventListener('click', e => e.preventDefault()));
+  $$('[data-sem]').forEach(b => b.onclick = () => { S.agendaSemaine = b.dataset.sem === '0' ? null : new Date(lundiDe(S.agendaSemaine || new Date()).getTime() + Number(b.dataset.sem) * 864e5); pageAgenda(); });
   if ($('#aLien')) $('#aLien').onclick = () => copierTexte(monLien, 'Lien copié : ' + monLien);
   if ($('#aConfig')) $('#aConfig').onclick = e => { e.preventDefault(); aller('reglages'); };
   $$('[data-ouvrir]').forEach(a => a.onclick = e => { e.preventDefault(); aller('fiche', a.dataset.ouvrir); });
@@ -2369,6 +2391,45 @@ function pageAgenda() {
         pageAgenda(); toast(enLigne ? 'Rendez-vous annulé, client prévenu' : 'Rendez-vous annulé');
       }));
   });
+}
+// Planning de la semaine : une colonne par jour, les rendez-vous de la ou des personnes choisies (couleur par personne).
+const COULEURS_PLANNING = ['#5c8edc', '#2f8f5b', '#c77d2b', '#8e5bd6'];
+const couleurPlanning = owner => COULEURS_PLANNING[Math.max(0, S.d.owners.indexOf(owner)) % COULEURS_PLANNING.length];
+function lundiDe(date) { const d = debutJour(new Date(date)); return new Date(d.getTime() - ((d.getDay() + 6) % 7) * 864e5); }
+function planning(liste) {
+  const lundi = lundiDe(S.agendaSemaine || new Date());
+  const jours = [0, 1, 2, 3, 4, 5, 6].map(i => new Date(lundi.getFullYear(), lundi.getMonth(), lundi.getDate() + i));
+  const fin = new Date(jours[6].getFullYear(), jours[6].getMonth(), jours[6].getDate() + 1);
+  const semaine = liste.filter(r => new Date(r['Début']) >= lundi && new Date(r['Début']) < fin).sort((a, b) => new Date(a['Début']) - new Date(b['Début']));
+  const heureDe = d => d.getHours() + d.getMinutes() / 60;
+  const premiere = Math.min(9, ...semaine.map(r => Math.floor(heureDe(new Date(r['Début'])))));
+  const derniere = Math.max(21, ...semaine.map(r => Math.ceil(heureDe(new Date(r.Fin || r['Début'])))));
+  const H = 44; // px par heure
+  const aujourdhui = debutJour(new Date()).getTime();
+  const nomJour = d => d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '') + ' ' + d.getDate();
+  const titre = jours[0].toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) + ' – ' + jours[6].toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+  const evenement = r => {
+    const d = new Date(r['Début']), f = new Date(r.Fin || d.getTime() + 30 * 6e4), c = client(r.ClientID);
+    const nom = c ? nomClient(c) : [r['Prénom'], r.Nom].filter(Boolean).join(' ') || r.Titre;
+    return { d, f, nom, couleur: couleurPlanning(r.Owner), r };
+  };
+  const evs = semaine.map(evenement);
+  const colonne = (jour, i) => '<div class="pl-col' + (jour.getTime() === aujourdhui ? ' pl-auj' : '') + '" style="height:' + (derniere - premiere) * H + 'px">' +
+    evs.filter(e => debutJour(e.d).getTime() === jour.getTime()).map(e =>
+      '<a href="#" class="pl-ev" ' + (e.r.ClientID ? 'data-ouvrir="' + e.r.ClientID + '" ' : '') + 'title="' + esc(fmtHeure(e.d) + ' · ' + e.nom + ' · ' + (e.r.Owner || '')) + '" style="top:' + (heureDe(e.d) - premiere) * H +
+      'px;height:' + Math.max(20, (e.f - e.d) / 36e5 * H) + 'px;--c:' + e.couleur + '"><b>' + esc(fmtHeure(e.d)) + '</b> ' + esc(e.nom) + '</a>').join('') + '</div>';
+  return '<div class="carte planning"><div class="pl-nav"><button class="btn mini" data-sem="-7" aria-label="Semaine précédente">' + ico('gauche') + '</button>' +
+      '<b>Semaine du ' + esc(titre) + '</b><button class="btn mini" data-sem="7" aria-label="Semaine suivante">' + ico('droite') + '</button>' +
+      '<button class="btn mini" data-sem="0">Aujourd’hui</button></div>' +
+    // Ordinateur : grille de la semaine
+    '<div class="pl-grille"><div class="pl-tete"><span></span>' + jours.map(j => '<span class="' + (j.getTime() === aujourdhui ? 'pl-auj-t' : '') + '">' + esc(nomJour(j)) + '</span>').join('') + '</div>' +
+      '<div class="pl-corps"><div class="pl-heures">' + Array.from({ length: derniere - premiere }, (_, k) => '<span style="height:' + H + 'px">' + (premiere + k) + ' h</span>').join('') + '</div>' +
+      jours.map(colonne).join('') + '</div></div>' +
+    // Téléphone : liste des jours de la semaine
+    '<div class="pl-liste">' + (evs.length ? jours.filter(j => evs.some(e => debutJour(e.d).getTime() === j.getTime())).map(j =>
+      '<div class="groupe etiquette">' + esc(j.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })) + '</div>' +
+      evs.filter(e => debutJour(e.d).getTime() === j.getTime()).map(e => '<a href="#" class="pl-ligne" ' + (e.r.ClientID ? 'data-ouvrir="' + e.r.ClientID + '"' : '') + ' style="--c:' + e.couleur + '"><b>' + esc(fmtHeure(e.d)) + '</b><span class="pl-nom">' + esc(e.nom) + '</span>' + avatar(e.r.Owner || '?', 's') + '</a>').join('')).join('')
+      : '<div class="vide" style="padding:18px">Aucun rendez-vous cette semaine.</div>') + '</div></div>';
 }
 /** Nouveau rendez-vous réservé en ligne (reçu en temps réel) : notification dans le CRM, au nom de l'intervenant concerné. */
 function notifierRdv(avant, x) {
