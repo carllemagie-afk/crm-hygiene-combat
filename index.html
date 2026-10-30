@@ -236,13 +236,14 @@
   .owner-ligne { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
   .owner-ligne select { width: auto; flex: 1; padding: 6px 10px; }
   .actions-fiche { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 18px; }
-  @media (min-width: 560px) and (max-width: 1099px) { .actions-fiche { grid-template-columns: repeat(7, 1fr); } }
+  @media (min-width: 560px) and (max-width: 1099px) { .actions-fiche { grid-template-columns: repeat(8, 1fr); } }
   .bulle.Comparatif { background: #e6eef3; color: var(--ardoise-700); border-color: transparent; }
   .comparateur-plein { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; background: var(--fond); animation: entree var(--doucement) both; }
   .comparateur-plein header { display: flex; align-items: center; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 14px 10px; background: linear-gradient(180deg, var(--ardoise-800), var(--ardoise-700)); color: #fff; }
   .comparateur-plein header b { font-size: 14px; } .comparateur-plein header span { color: var(--acier); font-size: 12.5px; }
   .comparateur-plein header .btn { margin-left: auto; background: rgba(255,255,255,.12); color: #fff; border-color: transparent; }
   .comparateur-plein iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+  .cadre-outil { display: block; width: 100%; min-height: 70vh; border: 0; border-radius: var(--rayon, 14px); background: #fff; }
   .piece-jointe { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--acier-50); border: 1px solid var(--trait); font-size: 13px; margin: 0 0 10px; }
   .piece-jointe.manque { background: var(--attention-50); border-color: #ecd3a8; color: var(--attention); }
   .variables button.var-pdf { border-style: dashed; }
@@ -586,7 +587,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.30-0053';
+const VERSION_APP = '2026.10.30-0245';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -617,6 +618,7 @@ const ICONES = {
   sortie: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>', etoile: '<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/>',
   clic: '<path d="m4 4 7.07 17 2.51-7.39L21 11.07z"/><path d="m13.6 13.6 5.9 5.9"/>',
   banque: '<path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3"/>',
+  calcul: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h4"/>',
   comparer: '<path d="M12 3v18M7 21h10M4 7h16M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z"/>',
   gauche: '<path d="m15 18-6-6 6-6"/>', droite: '<path d="m9 18 6-6-6-6"/>', tendance: '<path d="m23 6-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/>',
 };
@@ -637,6 +639,7 @@ const PAGES = [
   { id: 'objectifs', nom: 'Objectifs', ico: 'objectif', mobile: true },
   { id: 'emails', nom: 'E-mails', ico: 'mail', mobile: true },
   { id: 'agenda', nom: 'Agenda', ico: 'agenda' },
+  { id: 'calculateur', nom: 'Calculateur', ico: 'calcul' },
   { id: 'stock', nom: 'Stock & compta', ico: 'stock' },
   { id: 'reglages', nom: 'Réglages', ico: 'reglages' },
 ];
@@ -885,7 +888,16 @@ function rendre(modele, vars) {
     return v ? espace + v : '';
   }).replace(/\n{3,}/g, '\n\n').trim();
 }
-const variables = (c, owner) => Object.assign({}, c, { Owner: owner || c.Owner || '', Responsable: owner || c.Owner || '', Entreprise: c.Salle, 'Lien RDV': (S.d.reglages || {}).LIEN_RDV || '' });
+const variables = (c, owner) => Object.assign({}, c, { Owner: owner || c.Owner || '', Responsable: owner || c.Owner || '', Entreprise: c.Salle, 'Lien RDV': lienRdvDe(owner || c.Owner) });
+/** Même règle que le serveur : lien de réservation de la personne qui envoie (/rdv/matthieu/ ou /rdv/carl/), jamais d'après une adresse e-mail. */
+function lienRdvDe(owner) {
+  const prenom = s => String(s || '').trim().split(/\s+/)[0].normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const ivs = (S.d && S.d.intervenants) || [];
+  const iv = ivs.find(x => x.Owner === owner) || ivs.find(x => prenom(x.Owner) === prenom(owner));
+  if (iv && rdvActif(iv) && String(iv.Agenda || '').trim()) return (S.d.rdvBase || '') + iv.ID + '/';
+  return String(((S.d && S.d.reglages) || {}).LIEN_RDV || '').trim();
+}
+const rdvActif = iv => iv.Actif === true || /^(true|vrai|oui|1)$/i.test(String(iv.Actif));
 
 // =================================================================== Démarrage, navigation
 function charger() {
@@ -942,7 +954,7 @@ const fermerFenetres = () => $$('#couche .voile').forEach(v => v.remove());
  * L'écran se met à jour en 1 à 2 s, sans perdre ce que vous êtes en train d'écrire.
  */
 const TABLES_APP = { Clients: 'clients', 'Activités': 'activites', 'Tâches': 'taches', RDV: 'rdv', Vues: 'vues', 'Séquences': 'sequences',
-  'Modèles': 'modeles', Inscriptions: 'inscriptions', Commandes: 'commandes', Achats: 'achats', Banque: 'banque', Comparatifs: 'comparatifs' };
+  'Modèles': 'modeles', Inscriptions: 'inscriptions', Commandes: 'commandes', Achats: 'achats', Banque: 'banque', Comparatifs: 'comparatifs', Intervenants: 'intervenants' };
 function surveiller() {
   if (S.surveillance) return;
   S.surveillance = true;
@@ -980,6 +992,7 @@ function recevoir(r, base) {
     const liste = S.d[TABLES_APP[c.t]];
     if (!liste) return;
     const i = liste.findIndex(x => x.ID === c.id);
+    if (c.t === 'RDV' && c.l) notifierRdv(i >= 0 ? liste[i] : null, c.l);
     if (!c.l) { if (i >= 0) liste.splice(i, 1); } else if (i >= 0) liste[i] = c.l; else liste.push(c.l);
   });
   S.d.version = r.version;
@@ -1105,7 +1118,7 @@ function deconnecter() {
 function menus() {
   const tachesDuJour = S.d.taches.filter(t => !t.Faite && t.Owner === S.moi && t['Échéance'] && new Date(t['Échéance']) < new Date(debutJour().getTime() + 864e5)).length;
   const actif = p => (S.page === p.id || (p.id === 'clients' && ['fiche', 'import'].includes(S.page)) || (p.id === 'emails' && S.page === 'sequence') ||
-    (p.id === 'plus' && ['agenda', 'stock', 'reglages'].includes(S.page))) ? 'actif' : '';
+    (p.id === 'plus' && ['agenda', 'calculateur', 'stock', 'reglages'].includes(S.page))) ? 'actif' : '';
   const bouton = p => '<button data-aller="' + p.id + '" class="' + actif(p) + '">' + ico(p.ico) + p.nom +
     (p.id === 'taches' && tachesDuJour ? '<span class="compteur">' + tachesDuJour + '</span>' : '') + '</button>';
   $('#nav').innerHTML = '<div class="marque">' + BOUCLIER + '<div><b>HYGIÈNE &amp; COMBAT</b><span>CRM</span></div></div>' +
@@ -1140,7 +1153,7 @@ function aller(page, id) {
 function afficher() {
   menus();
   const pages = { clients: pageClients, fiche: pageFiche, taches: pageTaches, agenda: pageAgenda, emails: pageEmails, sequence: pageSequence, reglages: pageReglages, import: pageImport,
-    objectifs: pageObjectifs, stock: pageStock };
+    objectifs: pageObjectifs, stock: pageStock, calculateur: pageCalculateur };
   (pages[S.page] || pageClients)();
   memoriser();
 }
@@ -1446,7 +1459,7 @@ function pageFiche() {
           '<div class="owner-ligne">' + avatar(c.Owner || '?', 's') + '<select data-champ="Owner" aria-label="Contact owner">' +
             ['', ...d.owners].map(o => '<option value="' + esc(o) + '"' + (c.Owner === o ? ' selected' : '') + '>' + esc(o ? 'Owner : ' + o : 'Sans owner') + '</option>').join('') + '</select></div>' +
           '<div class="actions-fiche">' +
-            [['aAppel', 'tel', 'Appel'], ['aMail', 'mail', 'E-mail'], ['aSeq', 'sequence', ins ? 'Séquence ✓' : 'Séquence'], ['aNote', 'note', 'Note'], ['aTache', 'tache', 'Tâche'], ['aRdv', 'rdv', 'RDV'], ['aComp', 'comparer', 'Comparer']]
+            [['aAppel', 'tel', 'Appel'], ['aMail', 'mail', 'E-mail'], ['aSeq', 'sequence', ins ? 'Séquence ✓' : 'Séquence'], ['aNote', 'note', 'Note'], ['aTache', 'tache', 'Tâche'], ['aRdv', 'rdv', 'RDV'], ['aComp', 'comparer', 'Comparer'], ['aCalc', 'calcul', 'Conso']]
               .map(([id, i, n]) => '<button class="action" id="' + id + '"><span>' + ico(i) + '</span>' + n + '</button>').join('') +
           '</div></div>' +
           '<div class="proprietes">' +
@@ -1495,6 +1508,7 @@ function pageFiche() {
   $('#aTache').onclick = () => fenetreTache({ ClientID: c.ID });
   $('#aRdv').onclick = () => fenetreRdv(c);
   $('#aComp').onclick = () => ouvrirComparateur(c);
+  $('#aCalc').onclick = () => ouvrirCalculateur(c);
   brancherBandeauTache(c);
   brancherComparatifs(c);
   $('#ajoutChamp').onclick = () => demanderTexte('Nouveau champ', 'Nom du champ (visible sur toutes les fiches)', 'Ex. : Nombre d’adhérents').then(nom =>
@@ -1693,6 +1707,40 @@ function ouvrirComparateur(c) {
   z.querySelector('#cpFermer').onclick = () => { window.removeEventListener('message', recevoirMessage); z.remove(); S.ongletFiche = 'suivi'; if (S.page === 'fiche') pageFiche(); };
 }
 
+// =================================================================== Calculateur de consommation (calculateur/, page autonome)
+/** Adresse du calculateur, pré-remplie avec la salle et, si la fiche a un champ « Surface … », sa surface en m². */
+function adresseCalculateur(c) {
+  const q = new URLSearchParams();
+  if (c) {
+    q.set('salle', nomClient(c));
+    const cle = Object.keys(c).find(k => /surface|m²/i.test(k) && Number(String(c[k]).replace(',', '.').replace(/[^\d.]/g, '')) > 0);
+    if (cle) q.set('tatamis', String(c[cle]).replace(',', '.').replace(/[^\d.]/g, ''));
+  }
+  return 'calculateur/' + (String(q) ? '?' + q : '');
+}
+/** Le calculateur donne sa hauteur : le cadre s'ajuste, sans barre de défilement intérieure. */
+function ajusterCadre(cadre) {
+  const recevoir = e => {
+    if (!document.body.contains(cadre)) return window.removeEventListener('message', recevoir);
+    if (e.source === cadre.contentWindow && e.data && e.data.type === 'calculateur-hauteur') cadre.style.height = e.data.hauteur + 'px';
+  };
+  window.addEventListener('message', recevoir);
+}
+function pageCalculateur() {
+  $('#page').innerHTML = '<div class="page"><div class="entete"><div><h1>Calculateur</h1><p>Consommation de désinfectant : durée d’un bidon, d’un carton, et quantité à commander pour l’année.</p></div>' +
+    '<a class="btn" href="calculateur/" target="_blank" rel="noopener">' + ico('export') + 'Ouvrir à part</a></div>' +
+    '<iframe class="cadre-outil carte" id="calcCadre" title="Calculateur de consommation" src="' + adresseCalculateur(null) + '"></iframe></div>';
+  ajusterCadre($('#calcCadre'));
+}
+function ouvrirCalculateur(c) {
+  const z = document.createElement('div');
+  z.className = 'comparateur-plein';
+  z.innerHTML = '<header>' + ico('calcul') + '<div><b>Calculateur de consommation</b><br><span>' + esc(nomClient(c)) + '</span></div><button class="btn mini" id="caFermer">' + ico('croix') + 'Fermer</button></header>' +
+    '<iframe title="Calculateur de consommation" src="' + esc(adresseCalculateur(c)) + '"></iframe>';
+  document.body.appendChild(z);
+  z.querySelector('#caFermer').onclick = () => z.remove();
+}
+
 function fenetreChurn(c) {
   const f = fenetre({ titre: 'Ne recommande pas · ' + esc(nomClient(c)), corps:
     '<p class="doux" style="margin-top:0">Le client passe en <b>Lost</b> et compte dans le churn. Les relances de rachat s’arrêtent.</p>' +
@@ -1840,7 +1888,7 @@ function fenetreEmail(c, apresEnvoi) {
     '<div id="emPiece"></div><div class="signature" id="emSignature"></div>',
     pied: '<span class="gauche pale petit">Envoyé tout de suite depuis contact@</span><button class="btn" data-fermer>Annuler</button><button class="btn principal" id="emOk">' + ico('envoyer') + 'Envoyer</button>' });
   const vars = () => variables(c, f.$('#emOwner').value);
-  const signature = () => { f.$('#emSignature').innerHTML = signatureHtml(personneEquipe(f.$('#emOwner').value, S.d.reglages.EQUIPE), String(S.d.reglages.LIEN_RDV || '').trim()); };
+  const signature = () => { f.$('#emSignature').innerHTML = signatureHtml(personneEquipe(f.$('#emOwner').value, S.d.reglages.EQUIPE), lienRdvDe(f.$('#emOwner').value)); };
   f.$('#emModele').onchange = () => {
     const m = S.d.modeles.find(x => x.ID === f.$('#emModele').value);
     if (!m) return;
@@ -2279,29 +2327,131 @@ function fenetreRdv(c) {
 
 function pageAgenda() {
   const maintenant = new Date();
-  const avenir = S.d.rdv.filter(r => new Date(r.Fin || r['Début']) >= maintenant).sort((a, b) => String(a['Début']).localeCompare(String(b['Début'])));
-  const passes = S.d.rdv.filter(r => new Date(r.Fin || r['Début']) < maintenant).sort((a, b) => String(b['Début']).localeCompare(String(a['Début']))).slice(0, 10);
+  const visibles = S.d.rdv.filter(r => (S.agendaEquipe || r.Owner === S.moi) && !['Échec', 'En cours'].includes(r.Statut));
+  const actifs = visibles.filter(r => r.Statut !== 'Annulé');
+  const avenir = actifs.filter(r => new Date(r.Fin || r['Début']) >= maintenant).sort((a, b) => String(a['Début']).localeCompare(String(b['Début'])));
+  const passes = actifs.filter(r => new Date(r.Fin || r['Début']) < maintenant).sort((a, b) => String(b['Début']).localeCompare(String(a['Début']))).slice(0, 10);
+  const annules = visibles.filter(r => r.Statut === 'Annulé' && new Date(r['Début']) >= maintenant).sort((a, b) => String(a['Début']).localeCompare(String(b['Début'])));
+  const monLien = lienRdvDe(S.moi);
   const parJour = liste => {
     const jours = {};
     liste.forEach(r => { const k = new Date(r['Début']).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }); (jours[k] = jours[k] || []).push(r); });
     return Object.keys(jours).map(j => '<div class="groupe etiquette">' + esc(j) + '</div>' + jours[j].map(ligneRdv).join('')).join('');
   };
-  $('#page').innerHTML = '<div class="page"><div class="entete"><div><h1>Agenda</h1><p>' + avenir.length + ' rendez-vous à venir</p></div>' +
+  $('#page').innerHTML = '<div class="page"><div class="entete"><div><h1>Agenda</h1><p>' + avenir.length + ' rendez-vous à venir' + (S.agendaEquipe ? ' pour l’équipe' : '') + '</p></div>' +
     '<button class="btn principal" id="rNouv">' + ico('plus') + 'Nouveau rendez-vous</button></div>' +
+    '<div class="rangee" style="margin-bottom:14px;justify-content:space-between"><div class="segment"><button id="aMoi" class="' + (S.agendaEquipe ? '' : 'actif') + '">Mes rendez-vous</button>' +
+      '<button id="aEquipe" class="' + (S.agendaEquipe ? 'actif' : '') + '">Toute l’équipe</button></div>' +
+      (monLien ? '<button class="btn mini" id="aLien" title="' + esc(monLien) + '">' + ico('rdv') + 'Copier mon lien de réservation</button>' : '<a href="#" class="pale petit" id="aConfig">Activer ma page de réservation</a>') + '</div>' +
     '<div class="carte" style="margin-bottom:16px">' + (avenir.length ? parJour(avenir) : '<div class="vide">' + ico('agenda') + '<b>Aucun rendez-vous prévu</b>Planifiez-en un depuis une fiche client.</div>') + '</div>' +
+    (annules.length ? '<div class="etiquette" style="margin:22px 0 10px">Annulés</div><div class="carte">' + annules.map(ligneRdv).join('') + '</div>' : '') +
     (passes.length ? '<div class="etiquette" style="margin:22px 0 10px">Passés</div><div class="carte">' + passes.map(ligneRdv).join('') + '</div>' : '') +
-    '<p class="pale petit" style="margin-top:16px">Les rendez-vous et rappels sont dans Google Agenda (contact@) : installez l’appli Google Agenda sur vos téléphones pour les notifications.</p></div>';
+    '<p class="pale petit" style="margin-top:16px">Chaque personne a son agenda Google (secondaire, dans le compte contact@) : affichez-le dans l’appli Google Agenda de votre téléphone pour les notifications.</p></div>';
   $('#rNouv').onclick = () => fenetreRdv(null);
+  $('#aMoi').onclick = () => { S.agendaEquipe = false; pageAgenda(); };
+  $('#aEquipe').onclick = () => { S.agendaEquipe = true; pageAgenda(); };
+  if ($('#aLien')) $('#aLien').onclick = () => copierTexte(monLien, 'Lien copié : ' + monLien);
+  if ($('#aConfig')) $('#aConfig').onclick = e => { e.preventDefault(); aller('reglages'); };
   $$('[data-ouvrir]').forEach(a => a.onclick = e => { e.preventDefault(); aller('fiche', a.dataset.ouvrir); });
-  $$('[data-annuler]').forEach(b => b.onclick = () => confirmer('Annuler ce rendez-vous ?', 'Il sera supprimé de Google Agenda.', 'Annuler le RDV').then(ok => ok &&
-    appel('crmAnnulerRdv', b.dataset.annuler).then(() => { S.d.rdv = S.d.rdv.filter(r => r.ID !== b.dataset.annuler); pageAgenda(); toast('Rendez-vous annulé'); })));
+  $$('[data-annuler]').forEach(b => b.onclick = () => {
+    const x = S.d.rdv.find(r => r.ID === b.dataset.annuler);
+    const enLigne = x && x.Source === 'Page publique';
+    confirmer('Annuler ce rendez-vous ?', enLigne ? 'Il sera retiré de l’agenda de ' + (x.Owner || 'l’intervenant') + ' et le client recevra un e-mail d’annulation.' : 'Il sera supprimé de Google Agenda.', 'Annuler le RDV').then(ok => ok &&
+      appel('crmAnnulerRdv', b.dataset.annuler).then(() => {
+        if (enLigne) x.Statut = 'Annulé'; else S.d.rdv = S.d.rdv.filter(r => r.ID !== b.dataset.annuler);
+        pageAgenda(); toast(enLigne ? 'Rendez-vous annulé, client prévenu' : 'Rendez-vous annulé');
+      }));
+  });
+}
+/** Nouveau rendez-vous réservé en ligne (reçu en temps réel) : notification dans le CRM, au nom de l'intervenant concerné. */
+function notifierRdv(avant, x) {
+  if (x.Source !== 'Page publique' || x.Statut !== 'Confirmé' || (avant && avant.Statut === 'Confirmé')) return;
+  const qui = x.Owner === S.moi ? 'avec vous' : 'avec ' + String(x.Owner || '').split(/\s+/)[0];
+  toast('📅 Nouveau RDV ' + qui + ' : ' + [x['Prénom'], x.Nom].filter(Boolean).join(' ') + ', ' + new Date(x['Début']).toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
+}
+function copierTexte(texte, confirmation) {
+  (navigator.clipboard ? navigator.clipboard.writeText(texte) : Promise.reject()).then(() => toast(confirmation || 'Copié'), () => prompt('Copiez ce lien :', texte));
 }
 function ligneRdv(r, n) {
   const c = client(r.ClientID);
-  return '<div class="tache" style="--n:' + Math.min(n || 0, 20) + '"><div style="min-width:58px;font-weight:700;font-size:15px">' + esc(fmtHeure(r['Début'])) + '</div>' +
+  const enLigne = r.Source === 'Page publique';
+  const lieu = enLigne && r.Mode === 'Google Meet' && r.Meet ? '<a href="' + esc(r.Meet) + '" target="_blank" rel="noopener">Google Meet</a>'
+    : enLigne && r['Téléphone'] ? '<a href="tel:' + esc(telInternational(r['Téléphone'])) + '">' + esc(r['Téléphone']) + '</a>' : r.Lieu ? esc(r.Lieu) : '';
+  const quand = new Date(r['Début']);
+  return '<div class="tache" style="--n:' + Math.min(n || 0, 20) + (r.Statut === 'Annulé' ? ';opacity:.6' : '') + '"><div style="min-width:58px;font-weight:700;font-size:15px">' + esc(fmtHeure(r['Début'])) +
+    (Math.abs(quand - Date.now()) > 6 * 864e5 || r.Statut === 'Annulé' ? '<div class="pale petit" style="font-weight:400">' + esc(fmtDate(r['Début'])) + '</div>' : '') + '</div>' +
     '<div class="corps"><b>' + esc(r.Titre) + '</b><div class="sous">' + (c ? '<a href="#" data-ouvrir="' + c.ID + '">' + esc(nomClient(c)) + '</a>' : '') +
-    (r.Lieu ? '<span>' + esc(r.Lieu) + '</span>' : '') + (r['Invité'] ? '<span class="puce vert">Invitation envoyée</span>' : '') + '</div></div>' +
-    avatar(r.Owner || '?', 's') + (new Date(r['Début']) > new Date() ? '<button class="btn fantome icone" data-annuler="' + r.ID + '" aria-label="Annuler">' + ico('poubelle') + '</button>' : '') + '</div>';
+    (lieu ? '<span>' + lieu + '</span>' : '') +
+    (enLigne ? '<span class="puce">Réservé en ligne · confirmation CRM</span>' : r['Invité'] ? '<span class="puce vert">Invitation Google envoyée</span>' : '') +
+    (r.Statut === 'Annulé' ? '<span class="puce">Annulé</span>' : '') + (r.Motif ? '<span class="pale">' + esc(r.Motif) + '</span>' : '') + '</div></div>' +
+    avatar(r.Owner || '?', 's') + (quand > new Date() && r.Statut !== 'Annulé' ? '<button class="btn fantome icone" data-annuler="' + r.ID + '" aria-label="Annuler">' + ico('poubelle') + '</button>' : '') + '</div>';
+}
+
+// =================================================================== Prise de rendez-vous (réglages par intervenant)
+const RDV_JOURS_APP = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+const RDV_MODES_APP = ['Téléphone', 'Google Meet'];
+function texteAbsences(a) {
+  return (Array.isArray(a) ? a : []).map(x => x.du + (x.au && x.au !== x.du ? ' → ' + x.au : '') + (x.motif ? ' ' + x.motif : '')).join('\n');
+}
+function carteRdv() {
+  const ivs = S.d.intervenants || [];
+  if (!ivs.length) return '';
+  return '<div class="carte"><div class="carte-tete"><h2>Prise de rendez-vous</h2></div><div class="carte-corps">' +
+    '<p class="doux petit" style="margin-top:0">Une page publique et un agenda Google secondaire par personne (dans le compte contact@) : un rendez-vous avec l’un ne bloque pas l’autre. ' +
+    'Les événements « Occupé » ajoutés à la main dans cet agenda sont aussi pris en compte. Page de choix : <a href="' + esc(S.d.rdvBase) + '" target="_blank" rel="noopener">' + esc(S.d.rdvBase) + '</a></p>' +
+    ivs.map(iv => {
+      const p = 'rv_' + iv.ID + '_';
+      const h = iv.Horaires && !Array.isArray(iv.Horaires) ? iv.Horaires : {};
+      const modes = String(iv.Modes || RDV_MODES_APP.join(',')).split(',').map(s => s.trim());
+      const lien = (S.d.rdvBase || '') + iv.ID + '/';
+      return '<div style="border-top:1px solid var(--trait);padding-top:14px;margin-top:14px" data-rdv="' + esc(iv.ID) + '">' +
+        '<div class="rangee" style="justify-content:space-between;margin-bottom:10px"><div class="rangee">' + avatar(iv.Owner, 's') + '<b>' + esc(iv.Owner) + '</b><code class="pale petit">' + esc(iv.ID) + '</code></div>' +
+          '<label class="interrupteur"><input type="checkbox" id="' + p + 'actif"' + (rdvActif(iv) ? ' checked' : '') + '><i></i><span>Page active</span></label></div>' +
+        '<label class="champ"><span>ID de l’agenda Google secondaire (Paramètres de l’agenda > Intégrer l’agenda)</span><input type="text" id="' + p + 'agenda" value="' + esc(iv.Agenda || '') + '" placeholder="…@group.calendar.google.com"></label>' +
+        '<div class="grille-2">' +
+          '<label class="champ"><span>Durée d’un rendez-vous (min)</span><input type="number" id="' + p + 'duree" value="' + esc(iv['Durée']) + '" min="5" max="240" step="5"></label>' +
+          '<label class="champ"><span>Départ des créneaux toutes les (min)</span><input type="number" id="' + p + 'pas" value="' + esc(iv.Pas) + '" min="5" max="240" step="5"></label>' +
+          '<label class="champ"><span>Marge entre deux rendez-vous (min)</span><input type="number" id="' + p + 'marge" value="' + esc(iv.Marge) + '" min="0" max="240" step="5"></label>' +
+          '<label class="champ"><span>Délai minimal de réservation (heures)</span><input type="number" id="' + p + 'preavis" value="' + esc(Number(iv['Préavis']) / 60) + '" min="0" max="720" step="0.25"></label>' +
+          '<label class="champ"><span>Réservable jusqu’à (jours)</span><input type="number" id="' + p + 'horizon" value="' + esc(iv.Horizon) + '" min="1" max="365"></label>' +
+          '<div class="champ"><span>Types de rendez-vous</span><div class="rangee">' + RDV_MODES_APP.map(m => '<label class="rangee petit"><input type="checkbox" data-mode="' + p + '" value="' + esc(m) + '"' + (modes.includes(m) ? ' checked' : '') + '> ' + esc(m) + '</label>').join('') + '</div></div>' +
+        '</div>' +
+        '<div class="etiquette" style="margin:6px 0 8px">Horaires (heure de Paris · vide = fermé · plusieurs plages : 10:00-12:00, 14:00-18:00)</div>' +
+        '<div class="grille-2">' + RDV_JOURS_APP.map((j, i) => '<label class="champ"><span>' + j + '</span><input type="text" id="' + p + 'j' + (i + 1) + '" value="' + esc((h[i + 1] || []).join(', ')) + '" placeholder="Fermé"></label>').join('') + '</div>' +
+        '<label class="champ"><span>Absences · une par ligne : 2026-12-24 → 2026-12-26 Vacances, ou 2026-11-05 14:00 → 2026-11-05 18:00</span><textarea id="' + p + 'absences" rows="3">' + esc(texteAbsences(iv.Absences)) + '</textarea></label>' +
+        '<div id="' + p + 'test" class="petit">' + ((S.rdvTests || {})[iv.ID] || '') + '</div>' +
+        '<div class="rangee" style="justify-content:space-between"><div class="rangee"><button class="btn mini" data-copier="' + esc(lien) + '">' + ico('rdv') + 'Copier le lien</button>' +
+          '<a class="btn mini" href="' + esc(lien) + '" target="_blank" rel="noopener">Voir la page</a></div>' +
+          '<div class="rangee"><button class="btn" data-tester="' + esc(iv.ID) + '">Tester l’agenda</button><button class="btn principal" data-enregistrer="' + esc(iv.ID) + '">Enregistrer</button></div></div>' +
+      '</div>';
+    }).join('') + '</div></div>';
+}
+function brancherRdv() {
+  $$('[data-copier]').forEach(b => b.onclick = () => copierTexte(b.dataset.copier, 'Lien copié'));
+  $$('[data-enregistrer]').forEach(b => b.onclick = () => {
+    const id = b.dataset.enregistrer, p = 'rv_' + id + '_';
+    const horaires = {};
+    for (let d = 1; d <= 7; d++) horaires[d] = $('#' + p + 'j' + d).value.split(',').map(s => s.trim()).filter(Boolean);
+    occupe(b, appel('crmRdvIntervenant', {
+      ID: id, Agenda: $('#' + p + 'agenda').value.trim(), 'Durée': Number($('#' + p + 'duree').value), Pas: Number($('#' + p + 'pas').value),
+      Marge: Number($('#' + p + 'marge').value), 'Préavis': Math.round(Number($('#' + p + 'preavis').value) * 60), Horizon: Number($('#' + p + 'horizon').value),
+      Horaires: horaires, Absences: $('#' + p + 'absences').value, Actif: $('#' + p + 'actif').checked,
+      Modes: $$('[data-mode="' + p + '"]').filter(x => x.checked).map(x => x.value),
+    })).then(x => {
+      const i = S.d.intervenants.findIndex(v => v.ID === id);
+      if (i >= 0) S.d.intervenants[i] = x;
+      toast('Prise de rendez-vous enregistrée');
+      pageReglages();
+    });
+  });
+  $$('[data-tester]').forEach(b => b.onclick = () => {
+    const zone = $('#rv_' + b.dataset.tester + '_test');
+    occupe(b, appel('crmRdvTesterAgenda', b.dataset.tester)).then(r => {
+      S.rdvTests = S.rdvTests || {}; // gardé : la mise à jour en temps réel redessine la page
+      S.rdvTests[b.dataset.tester] = zone.innerHTML = '<p class="' + (r.principal ? 'rouge' : 'vert') + '">' + (r.principal ? '⚠️ C’est l’agenda principal : créez un agenda secondaire.' :
+        '✓ Agenda « ' + esc(r.nom) + ' » accessible (' + esc(r.fuseau) + ') · ' + r.evenements7j + ' événement(s) sur 7 jours · Google Meet ' + (r.meet ? 'disponible' : 'non disponible')) + '</p>';
+    }, () => { zone.innerHTML = ''; });
+  });
 }
 
 // =================================================================== E-mails : séquences, modèles, inscriptions
@@ -2622,16 +2772,18 @@ function pageReglages() {
       '<label class="champ"><span>E-mails de séquence maximum par jour</span><input type="number" id="rgQuota" value="' + esc(r.QUOTA_JOUR) + '" min="1" max="100"></label>' +
       '<label class="champ"><span>Début des envois (heure)</span><input type="number" id="rgDebut" value="' + esc(r.HEURE_DEBUT) + '" min="0" max="23"></label>' +
       '<label class="champ"><span>Fin des envois (heure)</span><input type="number" id="rgFin" value="' + esc(r.HEURE_FIN) + '" min="1" max="24"></label>' +
-      '<label class="champ"><span>Durée d’un rendez-vous (min)</span><input type="number" id="rgDuree" value="' + esc(r.DUREE_RDV) + '" min="5" step="5"></label>' +
-      '<label class="champ"><span>Lien de prise de rendez-vous · <code>{{Lien RDV}}</code></span><input type="url" id="rgLienRdv" value="' + esc(r.LIEN_RDV || '') + '" placeholder="https://calendar.app.google/…"></label></div>' +
+      '<label class="champ"><span>Durée d’un rendez-vous saisi dans le CRM (min)</span><input type="number" id="rgDuree" value="' + esc(r.DUREE_RDV) + '" min="5" step="5"></label></div>' +
+      '<p class="pale petit" style="margin:0 0 12px"><code>{{Lien RDV}}</code> et le bouton « Rendez-vous » de la signature renvoient vers la page de la personne qui envoie (voir Prise de rendez-vous).</p>' +
       '<label class="champ"><span>Signature des e-mails · une ligne par personne : Nom | Titre | Téléphone | Photo</span><textarea id="rgEquipe" rows="3">' + esc(r.EQUIPE || '') + '</textarea></label>' +
       '<div class="rangee" style="justify-content:flex-end"><button class="btn principal" id="rgOk">Enregistrer</button></div></div></div>' +
+    carteRdv() +
     carteApplication() +
     carteIA() +
     carteQonto() +
     '<div class="carte"><div class="carte-tete"><h2>Données</h2></div><div class="carte-corps rangee"><a class="btn" href="' + esc(S.d.classeurUrl) + '" target="_blank">' + ico('export') + 'Ouvrir le Google Sheet</a>' +
       '<button class="btn" id="rgRecharger">' + ico('recharger') + 'Recharger les données</button></div></div></div></div>';
   $('#rgSortir').onclick = deconnecter;
+  brancherRdv();
   brancherQonto();
   brancherIA();
   const inst = $('#rgInstaller');
@@ -2642,7 +2794,7 @@ function pageReglages() {
   $('#rgRecharger').onclick = () => occupe($('#rgRecharger'), charger()).then(() => toast('Données à jour'));
   $('#rgOk').onclick = () => occupe($('#rgOk'), appel('crmEnregistrerReglages', {
     OWNERS: $('#rgOwners').value, QUOTA_JOUR: Number($('#rgQuota').value), HEURE_DEBUT: Number($('#rgDebut').value),
-    HEURE_FIN: Number($('#rgFin').value), DUREE_RDV: Number($('#rgDuree').value), LIEN_RDV: $('#rgLienRdv').value.trim(), EQUIPE: $('#rgEquipe').value,
+    HEURE_FIN: Number($('#rgFin').value), DUREE_RDV: Number($('#rgDuree').value), EQUIPE: $('#rgEquipe').value,
   })).then(reg => { S.d.reglages = reg; S.d.owners = String(reg.OWNERS).split(',').map(s => s.trim()).filter(Boolean); menus(); toast('Réglages enregistrés'); });
 }
 
