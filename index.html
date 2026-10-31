@@ -586,6 +586,13 @@
   .kpi-chiffre { display: flex; align-items: baseline; gap: 8px; margin: 10px 0 12px; }
   .kpi-chiffre b { font-size: 30px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
   .principal-kpi .kpi-chiffre b { font-size: 46px; }
+  .kpi.cliquable { cursor: pointer; transition: box-shadow var(--vite), transform var(--vite); }
+  .kpi.cliquable:hover { box-shadow: var(--ombre-l); }
+  .liste-ventes .ligne-vente { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--trait); }
+  .liste-ventes .ligne-vente:last-child { border-bottom: 0; }
+  .liste-ventes .ligne-vente .corps { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .liste-ventes .ligne-vente.hors { opacity: .55; }
+  .liste-ventes .ligne-vente.hors b a { text-decoration: line-through; }
   .kpi-chiffre span { color: var(--doux); font-size: 15px; }
   .petit-kpi { margin: 6px 0 8px; } .petit-kpi b { font-size: 22px; }
   .kpi-detail { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 13px; color: var(--doux); }
@@ -664,7 +671,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-0354';
+const VERSION_APP = '2026.10.31-0356';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -3368,14 +3375,53 @@ function planObjectifs() {
   return mois;
 }
 
-/** Ventes réelles d'une période (option : seulement les clients d'un owner). */
-function ventesEntre(de, a, owner) {
+/** Vente retirée des objectifs (doublon…) : repérée par le début de ses notes, la commande reste dans l'historique. */
+const HORS_COMPTE = '⛔ Ne compte pas';
+const horsCompte = x => String(x.Notes || '').startsWith(HORS_COMPTE);
+/** Ventes réelles d'une période (option : seulement les clients d'un owner). `toutes` : y compris celles qui ne comptent pas. */
+function ventesEntre(de, a, owner, toutes) {
   return S.d.commandes.filter(x => {
+    if (!toutes && horsCompte(x)) return false;
     const d = new Date(x.Date);
     if (d < de || d >= a) return false;
     return !owner || (client(x.ClientID) || {}).Owner === owner;
   });
 }
+/** Les ventes d'une période, une par ligne, avec leur client : « Ne compte pas » (doublon…) ou « Supprimer ». */
+function fenetreVentes(de, a, qui) {
+  const f = fenetre({ titre: 'Ventes · ' + esc(nomMois(new Date(a.getFullYear(), a.getMonth() - 1, 1))) + (qui ? ' · ' + esc(qui.split(' ')[0]) : ''), large: true, corps: '<div id="vtListe"></div>' });
+  const dessiner = () => {
+    const liste = ventesEntre(de, a, qui, true).sort((x, y) => String(y.Date).localeCompare(String(x.Date)));
+    const comptees = liste.filter(x => !horsCompte(x)).length;
+    f.$('#vtListe').innerHTML = '<p class="doux" style="margin-top:0">' + comptees + ' vente' + (comptees > 1 ? 's' : '') + ' comptée' + (comptees > 1 ? 's' : '') +
+      (liste.length > comptees ? ' · ' + (liste.length - comptees) + ' retirée' + (liste.length - comptees > 1 ? 's' : '') : '') + '. Un doublon ? « Ne compte pas » le retire des objectifs (la commande reste sur la fiche) ; « Supprimer » l’efface.</p>' +
+      (liste.length ? '<div class="carte liste-ventes">' + liste.map(x => {
+        const c = client(x.ClientID), hors = horsCompte(x);
+        return '<div class="ligne-vente' + (hors ? ' hors' : '') + '"><div class="corps"><b>' + (c ? '<a href="#" data-fiche="' + esc(c.ID) + '">' + esc(nomClient(c)) + '</a>' : 'Fiche supprimée') + '</b>' +
+          '<span class="pale petit">' + esc(fmtDate(x.Date)) + ' · ' + esc(x.Type === 'Rachat' ? 'Rachat' : 'Nouveau') + ' · ' + esc(x.Bidons || 0) + ' bidon(s) · ' + euros(montantCommande(x) + (Number(x['Livraison HT']) || 0)) + ' HT' +
+          (c && c.Owner ? ' · ' + esc(String(c.Owner).split(' ')[0]) : '') + (hors ? ' · <b>ne compte pas</b>' : '') + '</span></div>' +
+          '<div class="rangee"><button class="btn mini" data-compte="' + esc(x.ID) + '">' + (hors ? 'Compter à nouveau' : 'Ne compte pas') + '</button>' +
+          '<button class="btn mini fantome icone" data-suppr="' + esc(x.ID) + '" aria-label="Supprimer la vente">' + ico('poubelle') + '</button></div></div>';
+      }).join('') + '</div>' : '<div class="carte vide">' + ico('panier') + '<b>Aucune vente</b>sur cette période.</div>');
+    f.el.querySelectorAll('[data-fiche]').forEach(l => l.onclick = ev => { ev.preventDefault(); f.fermer(); aller('fiche', l.dataset.fiche); });
+    f.el.querySelectorAll('[data-compte]').forEach(b => b.onclick = () => {
+      const x = S.d.commandes.find(y => y.ID === b.dataset.compte);
+      const notes = horsCompte(x) ? String(x.Notes).slice(HORS_COMPTE.length).replace(/^ · /, '') : HORS_COMPTE + (x.Notes ? ' · ' + x.Notes : '');
+      x.Notes = notes; dessiner(); afficher(); toast(horsCompte(x) ? 'Vente retirée des objectifs' : 'Vente comptée à nouveau'); // instantané
+      enFond(appel('crmModifierCommande', x.ID, { Notes: notes }).then(n => Object.assign(x, n)));
+    });
+    f.el.querySelectorAll('[data-suppr]').forEach(b => b.onclick = () => {
+      const x = S.d.commandes.find(y => y.ID === b.dataset.suppr);
+      confirmer('Supprimer cette vente ?', 'La commande de ' + esc(nomClient(client(x.ClientID)) || 'ce client') + ' du ' + esc(fmtDate(x.Date)) + ' sera effacée (fiche et objectifs).', 'Supprimer').then(ok => {
+        if (!ok) return;
+        S.d.commandes = S.d.commandes.filter(y => y.ID !== x.ID); dessiner(); afficher(); toast('Vente supprimée'); // instantané
+        enFond(appel('crmSupprimerCommande', x.ID));
+      });
+    });
+  };
+  dessiner();
+}
+
 function bilan(cmds, cout) {
   const e = economie();
   const ca = cmds.reduce((t, x) => t + montantCommande(x) + (Number(x['Livraison HT']) || 0), 0);
@@ -3471,7 +3517,7 @@ function pageObjectifs() {
     d = fin;
   }
   const churn = churnReel();
-  const cumulReel = S.d.commandes.filter(x => x.Type !== 'Rachat' && new Date(x.Date) < finM && (!qui || (client(x.ClientID) || {}).Owner === qui)).length;
+  const cumulReel = S.d.commandes.filter(x => x.Type !== 'Rachat' && !horsCompte(x) && new Date(x.Date) < finM && (!qui || (client(x.ClientID) || {}).Owner === qui)).length;
 
   $('#page').innerHTML = '<div class="page objectifs">' +
     '<div class="entete"><div><h1>Objectifs</h1><p>Un client passé en Won = une vente. Les rachats sont estimés à ' + esc(String(R('COMMANDES_PAR_AN')).replace('.', ',')) + ' commandes par client et par an.</p></div>' +
@@ -3481,7 +3527,7 @@ function pageObjectifs() {
       '<div class="segment">' + [['', 'Équipe'], ...owners.map(o => [o, o.split(' ')[0]])].map(([v, n]) => '<button data-qui="' + esc(v) + '" class="' + (qui === v ? 'actif' : '') + '">' + esc(n) + '</button>').join('') + '</div></div>' +
     (i < 0 ? '<div class="carte carte-corps doux" style="margin-bottom:16px">Les objectifs commencent en ' + esc(nomMois(moisDebut())) + '. Les ventes de ce mois comptent quand même ci-dessous.</div>' : '') +
     '<div class="grille-obj">' +
-      '<div class="carte kpi principal-kpi"><div class="kpi-tete"><span class="etiquette">Ventes du mois</span><span class="pct ' + (pct(reel.ventes, obj.ventes) >= 100 ? 'ok' : '') + '">' + pctTxt(reel.ventes, obj.ventes) + '</span></div>' +
+      '<div class="carte kpi principal-kpi cliquable" id="obVentes" role="button" tabindex="0" title="Voir les ventes une par une"><div class="kpi-tete"><span class="etiquette">Ventes du mois ›</span><span class="pct ' + (pct(reel.ventes, obj.ventes) >= 100 ? 'ok' : '') + '">' + pctTxt(reel.ventes, obj.ventes) + '</span></div>' +
         '<div class="kpi-chiffre"><b data-compte="' + reel.ventes + '">' + reel.ventes + '</b><span>/ ' + obj.ventes + '</span></div>' + barre(reel.ventes, obj.ventes, 'grande') +
         '<div class="kpi-detail"><span>' + ico('plus') + 'Nouveaux <b>' + reel.nouveaux + '</b> / ' + obj.nouveaux + '</span><span>' + ico('recharger') + 'Rachats <b>' + reel.rachats + '</b> / ' + obj.rachats + '</span>' +
           (reel.ventes > obj.ventes && obj.ventes ? '<span class="vert">' + ico('tendance') + '+' + (reel.ventes - obj.ventes) + ' au-dessus de l’objectif</span>' : '') + '</div></div>' +
@@ -3521,6 +3567,8 @@ function pageObjectifs() {
   $$('[data-mois]').forEach(b => b.onclick = () => { S.moisObj = plan[Number(b.dataset.mois)].debut; pageObjectifs(); });
   $('#obRachats').onclick = () => { S.vue = 'rachat'; S.filtres = null; aller('clients'); };
   $('#obHyp').onclick = fenetreHypotheses;
+  $('#obVentes').onclick = () => fenetreVentes(deP, finM, qui);
+  $('#obVentes').onkeydown = ev => { if (ev.key === 'Enter') fenetreVentes(deP, finM, qui); };
   compterChiffres();
 }
 
