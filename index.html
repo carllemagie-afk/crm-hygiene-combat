@@ -664,7 +664,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-0335';
+const VERSION_APP = '2026.10.31-0354';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1041,6 +1041,8 @@ const rdvActif = iv => iv.Actif === true || /^(true|vrai|oui|1)$/i.test(String(i
 function charger() {
   return appel('crmCharger').then(d => { S.d = d; afficher(); });
 }
+/** Action instantanée : l'écran a déjà changé, le serveur suit en arrière-plan ; s'il échoue (erreur affichée), les vraies données sont rechargées. */
+const enFond = promesse => promesse.catch(() => charger());
 
 /** Ouverture : données de l'appareil affichées tout de suite (pas d'attente du serveur), puis mise à jour en arrière-plan. */
 function lancerCRM() {
@@ -1673,7 +1675,7 @@ function pageFiche() {
   $('#ajoutChamp').onclick = () => demanderTexte('Nouveau champ', 'Nom du champ (visible sur toutes les fiches)', 'Ex. : Nombre d’adhérents').then(nom =>
     appel('crmAjouterChamp', nom).then(ch => { S.d.champs = ch; pageFiche(); toast('Champ « ' + nom + ' » ajouté'); }));
   $('#suppr').onclick = () => confirmer('Supprimer ' + esc(nomClient(c)) + ' ?', 'La fiche sera supprimée du CRM (sa séquence éventuelle est arrêtée). Cette action est définitive.', 'Supprimer')
-    .then(ok => ok && appel('crmSupprimerClient', c.ID).then(() => { S.d.clients = S.d.clients.filter(x => x.ID !== c.ID); aller('clients'); toast('Fiche supprimée'); }));
+    .then(ok => { if (!ok) return; S.d.clients = S.d.clients.filter(x => x.ID !== c.ID); aller('clients'); toast('Fiche supprimée'); enFond(appel('crmSupprimerClient', c.ID)); });
   const arret = $('#arretSeq');
   if (arret) arret.onclick = () => confirmer('Arrêter la séquence ?', 'Plus aucun e-mail ni tâche de « ' + esc(ins.Nom) + ' » ne sera créé pour ce client.', 'Arrêter')
     .then(ok => ok && occupe(arret, appel('crmArreterSequence', c.ID)).then(data => { S.d = data; pageFiche(); toast('Séquence arrêtée'); }));
@@ -1765,7 +1767,7 @@ function fenetreModifActivite(a) {
   f.$('#maOk').onclick = () => occupe(f.$('#maOk'), appel('crmModifierActivite', a.ID, f.$('#maTxt').value.trim()))
     .then(x => { remplacer(S.d.activites, x); f.fermer(); afficher(); toast('Modifié'); });
   f.$('#maSuppr').onclick = () => confirmer('Supprimer ?', 'Cet élément sera retiré de l’historique du client.', 'Supprimer').then(ok => ok &&
-    appel('crmSupprimerActivite', a.ID).then(() => { S.d.activites = S.d.activites.filter(x => x.ID !== a.ID); f.fermer(); afficher(); toast('Supprimé'); }));
+    (S.d.activites = S.d.activites.filter(x => x.ID !== a.ID), f.fermer(), afficher(), toast('Supprimé'), enFond(appel('crmSupprimerActivite', a.ID))));
 }
 
 // =================================================================== Commandes (ventes, rachats, churn)
@@ -1839,7 +1841,7 @@ function fenetreCommande(c, x) {
       .then(y => { majClient(y); f.fermer(); afficher(); toast(type + ' enregistrée 🎉'); });
   };
   if (x) f.$('#cmSuppr').onclick = () => confirmer('Supprimer cette commande ?', 'Elle ne comptera plus dans les ventes ni dans le stock.', 'Supprimer').then(ok => ok &&
-    appel('crmSupprimerCommande', x.ID).then(() => { S.d.commandes = S.d.commandes.filter(y => y.ID !== x.ID); f.fermer(); afficher(); toast('Commande supprimée'); }));
+    (S.d.commandes = S.d.commandes.filter(y => y.ID !== x.ID), f.fermer(), afficher(), toast('Commande supprimée'), enFond(appel('crmSupprimerCommande', x.ID))));
 }
 
 // =================================================================== Comparateur produits
@@ -1866,7 +1868,7 @@ function brancherComparatifs(c) {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }));
   $$('[data-cp-suppr]').forEach(b => b.onclick = () => confirmer('Supprimer ce comparatif ?', 'Le PDF sera retiré de la fiche. Les e-mails déjà envoyés ne changent pas.', 'Supprimer').then(ok => ok &&
-    appel('crmSupprimerComparatif', b.dataset.cpSuppr).then(() => { S.d.comparatifs = S.d.comparatifs.filter(x => x.ID !== b.dataset.cpSuppr); pageFiche(); toast('Comparatif supprimé'); })));
+    (S.d.comparatifs = S.d.comparatifs.filter(x => x.ID !== b.dataset.cpSuppr), pageFiche(), toast('Comparatif supprimé'), enFond(appel('crmSupprimerComparatif', b.dataset.cpSuppr)))));
 }
 
 /** L'outil de comparaison s'ouvre en plein écran par-dessus la fiche ; « Enregistrer sur la fiche » range le PDF chez ce client. */
@@ -2029,18 +2031,29 @@ function fenetreAppel(c, tache) {
   f.$('#apRappel').onchange = e => { f.$('#apZone').style.display = e.target.checked ? 'grid' : 'none'; };
   f.$('#apOk').onclick = () => {
     const texte = [duree ? 'Durée : ' + dureeTexte(duree) : '', f.$('#apTxt').value.trim()].filter(Boolean).join('\n');
-    const etapes = [appel('crmActivite', { clientId: c.ID, type: 'Appel', resultat, texte, auteur: S.moi })
-      .then(r => { S.d.activites.push(r.activite); if (r.client) majClient(r.client); })];
-    const changes = {};
     if (!tag) return toast('Choisissez un tag pour valider l’appel', true);
+    // Instantané : l'appel, le tag, le rappel apparaissent tout de suite ; le serveur suit en arrière-plan.
+    const prov = { ID: 'tmp' + Date.now(), ClientID: c.ID, Date: new Date().toISOString(), Type: 'Appel', 'Résultat': resultat, Auteur: S.moi, Texte: texte };
+    S.d.activites.push(prov);
+    enFond(appel('crmActivite', { clientId: c.ID, type: 'Appel', resultat, texte, auteur: S.moi }).then(r => {
+      S.d.activites = S.d.activites.filter(a => a.ID !== prov.ID); S.d.activites.push(r.activite);
+      const ici = client(c.ID); // le tag choisi ici reste celui de l'écran (il part par enregistrerChamps)
+      if (r.client && ici) majClient(Object.assign(r.client, { Tag: ici.Tag, 'Catégorie': ici['Catégorie'], Devis: ici.Devis }));
+      if (S.page === 'fiche') afficher();
+    }));
+    const changes = {};
     if (tag !== client(c.ID).Tag) changes.Tag = tag;
     if (sous !== String(client(c.ID)['Catégorie'] || '')) changes['Catégorie'] = sous;
     if (f.$('#apDevis').value) changes.Devis = f.$('#apDevis').value;
-    if (Object.keys(changes).length) etapes.push(appel('crmEnregistrerClient', c.ID, changes).then(x => majClient(x)));
-    if (f.$('#apRappel').checked) etapes.push(appel('crmTache', { clientId: c.ID, type: 'Appel', titre: 'Rappeler ' + (c['Prénom'] || nomClient(c)),
-      echeance: versIso(f.$('#apDate').value, f.$('#apHeure').value), owner: c.Owner || S.moi, rappel: true }).then(r => { S.d.taches.push(r.tache); if (r.avertissement) toast(r.avertissement, true); }));
-    if (tache) etapes.push(appel('crmTacheFaite', tache.ID, true).then(t => { remplacer(S.d.taches, t); if (S.tacheEnCours === t.ID) S.tacheEnCours = null; }));
-    occupe(f.$('#apOk'), Promise.all(etapes)).then(() => { f.fermer(); afficher(); toast('Appel enregistré'); });
+    if (Object.keys(changes).length) enregistrerChamps(c.ID, changes);
+    if (f.$('#apRappel').checked) {
+      const rappel = { clientId: c.ID, type: 'Appel', titre: 'Rappeler ' + (c['Prénom'] || nomClient(c)), echeance: versIso(f.$('#apDate').value, f.$('#apHeure').value), owner: c.Owner || S.moi, rappel: true };
+      const pt = { ID: 'tmp' + Date.now() + 'r', ClientID: c.ID, Type: 'Appel', Titre: rappel.titre, Notes: '', 'Échéance': rappel.echeance, Owner: rappel.owner, Faite: false };
+      S.d.taches.push(pt);
+      enFond(appel('crmTache', rappel).then(r => { S.d.taches = S.d.taches.filter(x => x.ID !== pt.ID); S.d.taches.push(r.tache); afficher(); if (r.avertissement) toast(r.avertissement, true); }));
+    }
+    if (tache) { tache.Faite = true; if (S.tacheEnCours === tache.ID) S.tacheEnCours = null; enFond(appel('crmTacheFaite', tache.ID, true).then(t => remplacer(S.d.taches, t))); }
+    f.fermer(); afficher(); toast('Appel enregistré');
   };
 }
 
@@ -2410,7 +2423,7 @@ function bandeauTache(c) {
 function brancherBandeauTache(c) {
   const t = S.tacheEnCours && S.d.taches.find(x => x.ID === S.tacheEnCours);
   if (!t || !$('#btFaite')) return;
-  const finir = () => appel('crmTacheFaite', t.ID, true).then(x => { remplacer(S.d.taches, x); S.tacheEnCours = null; if (S.page === 'fiche') pageFiche(); toast('Tâche terminée'); });
+  const finir = () => { t.Faite = true; S.tacheEnCours = null; if (S.page === 'fiche') pageFiche(); toast('Tâche terminée'); return enFond(appel('crmTacheFaite', t.ID, true).then(x => remplacer(S.d.taches, x))); };
   $('#btFaite').onclick = finir;
   $('#btFermer').onclick = () => { S.tacheEnCours = null; pageFiche(); };
   const faire = $('#btFaire');
@@ -2421,7 +2434,10 @@ function brancherTaches() {
   $$('[data-faite]').forEach(i => i.onchange = () => {
     const ligne = i.closest('.tache');
     if (ligne) ligne.classList.toggle('faite', i.checked);
-    appel('crmTacheFaite', i.dataset.faite, i.checked).then(t => { remplacer(S.d.taches, t); setTimeout(afficher, 350); if (i.checked) toast('Tâche terminée'); });
+    const tt = S.d.taches.find(x => x.ID === i.dataset.faite);
+    if (tt) tt.Faite = i.checked;
+    setTimeout(afficher, 350); if (i.checked) toast('Tâche terminée');
+    enFond(appel('crmTacheFaite', i.dataset.faite, i.checked).then(t => remplacer(S.d.taches, t)));
   });
   $$('[data-ouvrir]').forEach(a => a.onclick = e => { e.preventDefault(); e.stopPropagation(); const t = a.closest('[data-tache-ouvrir]'); ouvrirTache(t ? t.dataset.tacheOuvrir : null, a.dataset.ouvrir); });
   // Toute la ligne ouvre la fiche du client, avec la tâche à faire en haut (sauf la case, les boutons et les liens)
@@ -2453,11 +2469,15 @@ function fenetreTache(t) {
   f.$('#taOk').onclick = () => {
     const titre = f.$('#taTitre').value.trim();
     if (!titre) return toast('Indiquez la tâche', true);
-    occupe(f.$('#taOk'), appel('crmTache', { ID: t.ID, clientId: f.$('#taClient').value, type, titre, notes: f.$('#taNotes').value.trim(),
-      echeance: versIso(f.$('#taDate').value, f.$('#taHeure').value), owner: f.$('#taOwner').value, rappel: f.$('#taRappel').checked }))
-      .then(r => { remplacer(S.d.taches, r.tache); f.fermer(); afficher(); toast(r.avertissement || 'Tâche enregistrée', !!r.avertissement); });
+    const donnees = { ID: t.ID, clientId: f.$('#taClient').value, type, titre, notes: f.$('#taNotes').value.trim(),
+      echeance: versIso(f.$('#taDate').value, f.$('#taHeure').value), owner: f.$('#taOwner').value, rappel: f.$('#taRappel').checked };
+    // instantané : la tâche apparaît (ou change) tout de suite ; le rappel Google Agenda est créé en arrière-plan
+    const prov = Object.assign({}, t, { ID: t.ID || 'tmp' + Date.now(), ClientID: donnees.clientId, Type: type, Titre: titre, Notes: donnees.notes,
+      'Échéance': donnees.echeance, Owner: donnees.owner, Faite: !!t.Faite });
+    remplacer(S.d.taches, prov); f.fermer(); afficher(); toast('Tâche enregistrée');
+    enFond(appel('crmTache', donnees).then(r => { S.d.taches = S.d.taches.filter(x => x.ID !== prov.ID); remplacer(S.d.taches, r.tache); afficher(); if (r.avertissement) toast(r.avertissement, true); }));
   };
-  if (f.$('#taSuppr')) f.$('#taSuppr').onclick = () => appel('crmSupprimerTache', t.ID).then(() => { S.d.taches = S.d.taches.filter(x => x.ID !== t.ID); f.fermer(); afficher(); toast('Tâche supprimée'); });
+  if (f.$('#taSuppr')) f.$('#taSuppr').onclick = () => { S.d.taches = S.d.taches.filter(x => x.ID !== t.ID); f.fermer(); afficher(); toast('Tâche supprimée'); enFond(appel('crmSupprimerTache', t.ID)); };
 }
 
 function pageTaches() {
@@ -2519,10 +2539,11 @@ function fenetreRdv(c) {
   f.$('#rdTitre').oninput = () => { titreTouche = true; };
   f.$('#rdClient').onchange = maj;
   maj();
-  f.$('#rdOk').onclick = () => { const invitation = f.$('#rdInviter').checked; occupe(f.$('#rdOk'), appel('crmRdv', { clientId: f.$('#rdClient').value, titre: f.$('#rdTitre').value.trim() || 'Rendez-vous Hygiène & Combat',
+  f.$('#rdOk').onclick = () => { const invitation = f.$('#rdInviter').checked; const envoi = (appel('crmRdv', { clientId: f.$('#rdClient').value, titre: f.$('#rdTitre').value.trim() || 'Rendez-vous Hygiène & Combat',
     debut: versIso(f.$('#rdDate').value, f.$('#rdHeure').value), duree: Number(f.$('#rdDuree').value) || 30, lieu: f.$('#rdLieu').value.trim(),
     notes: f.$('#rdNotes').value.trim(), inviter: f.$('#rdInviter').checked, owner: f.$('#rdOwner').value }))
-    .then(data => { S.d = data; f.fermer(); afficher(); toast(invitation ? 'Rendez-vous planifié, confirmation envoyée' : 'Rendez-vous ajouté à l’agenda'); }); };
+    f.fermer(); toast('Rendez-vous en cours d’enregistrement…'); // la fenêtre se ferme tout de suite, l'agenda suit
+    enFond(envoi.then(data => { S.d = data; afficher(); toast(invitation ? 'Rendez-vous planifié, confirmation envoyée' : 'Rendez-vous ajouté à l’agenda'); })); };
 }
 
 function pageAgenda() {
@@ -2562,10 +2583,12 @@ function pageAgenda() {
     const x = S.d.rdv.find(r => r.ID === b.dataset.annuler);
     const enLigne = x && x.Source === 'Page publique';
     confirmer('Annuler ce rendez-vous ?', enLigne ? 'Il sera retiré de l’agenda de ' + (x.Owner || 'l’intervenant') + ' et le client recevra un e-mail d’annulation.' : 'Il sera supprimé de Google Agenda.', 'Annuler le RDV').then(ok => ok &&
-      appel('crmAnnulerRdv', b.dataset.annuler).then(() => {
-        if (enLigne) x.Statut = 'Annulé'; else S.d.rdv = S.d.rdv.filter(r => r.ID !== b.dataset.annuler);
+      (() => { // instantané : retiré de l'écran tout de suite, l'agenda Google et l'e-mail suivent en arrière-plan
+        const id = b.dataset.annuler;
+        if (enLigne) x.Statut = 'Annulé'; else S.d.rdv = S.d.rdv.filter(r => r.ID !== id);
         pageAgenda(); toast(enLigne ? 'Rendez-vous annulé, client prévenu' : 'Rendez-vous annulé');
-      }));
+        enFond(appel('crmAnnulerRdv', id));
+      })());
   });
 }
 // Planning de la semaine : une colonne par jour, les rendez-vous de la ou des personnes choisies (couleur par personne).
@@ -2888,7 +2911,7 @@ function fenetreModele(m) {
     occupe(f.$('#moOk'), appel('crmEnregistrerModele', x)).then(r => { remplacer(S.d.modeles, r); f.fermer(); pageEmails(); toast('Modèle enregistré'); });
   };
   if (f.$('#moSuppr')) f.$('#moSuppr').onclick = () => confirmer('Supprimer ce modèle ?', '« ' + esc(m.Nom) + ' » sera supprimé.', 'Supprimer').then(ok => ok &&
-    appel('crmSupprimerModele', m.ID).then(() => { S.d.modeles = S.d.modeles.filter(x => x.ID !== m.ID); f.fermer(); pageEmails(); toast('Modèle supprimé'); }));
+    (S.d.modeles = S.d.modeles.filter(x => x.ID !== m.ID), f.fermer(), pageEmails(), toast('Modèle supprimé'), enFond(appel('crmSupprimerModele', m.ID))));
 }
 
 function ongletInscriptions() {
@@ -3665,7 +3688,7 @@ function fenetreAchat(a, suggestion) {
     montant: f.$('#acM').value, livraison: f.$('#acL').value, box: f.$('#acBox').checked, notes: f.$('#acN').value.trim(), recue: f.$('#acRecue').checked,
     recueLe: a && a['Reçue le'] ? a['Reçue le'] : '' })).then(x => { remplacer(S.d.achats, x); f.fermer(); afficher(); toast('Commande fournisseur enregistrée'); });
   if (a) f.$('#acSuppr').onclick = () => confirmer('Supprimer cette commande fournisseur ?', 'Le stock sera recalculé sans elle.', 'Supprimer').then(ok => ok &&
-    appel('crmSupprimerAchat', a.ID).then(() => { S.d.achats = S.d.achats.filter(x => x.ID !== a.ID); f.fermer(); afficher(); toast('Supprimée'); }));
+    (S.d.achats = S.d.achats.filter(x => x.ID !== a.ID), f.fermer(), afficher(), toast('Supprimée'), enFond(appel('crmSupprimerAchat', a.ID))));
 }
 
 lancerCRM();
