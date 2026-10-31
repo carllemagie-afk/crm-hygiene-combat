@@ -676,7 +676,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-1738';
+const VERSION_APP = '2026.10.31-1853';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -691,6 +691,8 @@ function fenetreDevisQonto(c) {
   const r = S.d.reglages, q = S.d.qonto || {};
   const owner = c.Owner || S.moi;
   const corpsDefaut = 'Bonjour' + (c['Prénom'] ? ' ' + c['Prénom'] : '') + ',\n\nComme convenu, voici votre devis pour le désinfectant Hygiène & Combat.\n\nJe reste disponible pour toute question.\n\nBien à vous,\n' + String(owner || '').split(' ')[0];
+  const adresse = String(c.Adresse || '').trim();
+  const adr = { rue: adresse.replace(/,?\s*\d{5}.*$/, '').trim(), cp: (adresse.match(/\b\d{5}\b/) || [])[0] || '', ville: c.Ville || (adresse.match(/\d{5}\s+([^,]+)/) || [])[1] || '' };
   if (!q.connecte) {
     const f = fenetre({ titre: 'Devis Qonto', corps: '<p class="doux" style="margin-top:0">Qonto n’est pas encore connecté au CRM (Réglages > Banque · Qonto). En attendant, créez le devis directement dans Qonto.</p>',
       pied: '<button class="btn" data-fermer>Fermer</button><a class="btn principal" href="' + QONTO_WEB + '" target="_blank" rel="noopener">' + LOGO_QONTO + 'Ouvrir Qonto</a>' });
@@ -701,6 +703,10 @@ function fenetreDevisQonto(c) {
       '<label class="champ"><span>Prix d’un bidon (€ HT)</span><input type="number" id="dqP" min="0" step="0.01" value="' + esc(r.PRIX_BIDON_HT) + '"></label>' +
       '<label class="champ"><span>Livraison (€ HT)</span><input type="number" id="dqL" min="0" step="0.01" value="' + esc(r.LIVRAISON_CLIENT_HT) + '"></label></div>' +
     '<div class="total-devis" id="dqTotal"></div>' +
+    '<div class="etiquette" style="margin:0 0 6px">Adresse de facturation (obligatoire pour Qonto)</div>' +
+    '<label class="champ"><span>Rue</span><input type="text" id="dqRue" value="' + esc(adr.rue) + '" placeholder="12 rue des Lilas"></label>' +
+    '<div class="trois-champs" style="grid-template-columns:1fr 2fr"><label class="champ"><span>Code postal</span><input type="text" id="dqCp" inputmode="numeric" maxlength="5" value="' + esc(adr.cp) + '" placeholder="92000"></label>' +
+      '<label class="champ"><span>Ville</span><input type="text" id="dqVille" value="' + esc(adr.ville) + '"></label></div>' +
     '<label class="interrupteur" style="margin:4px 0 12px"><input type="checkbox" id="dqEnv"' + (c.Email ? ' checked' : ' disabled') + '><i></i>Envoyer le devis par Qonto à ' + esc(c.Email || '(pas d’e-mail sur la fiche)') + '</label>' +
     '<div id="dqMail"><label class="champ"><span>Objet de l’e-mail</span><input type="text" id="dqO" value="Votre devis Hygiène &amp; Combat"></label>' +
       '<label class="champ"><span>Message</span><textarea id="dqM" style="min-height:150px">' + esc(corpsDefaut) + '</textarea></label></div>' +
@@ -719,7 +725,9 @@ function fenetreDevisQonto(c) {
   maj();
   f.$('#dqOk').onclick = () => {
     const env = f.$('#dqEnv').checked;
-    occupe(f.$('#dqOk'), appel('crmDevisQonto', { clientId: c.ID, bidons: n('#dqB'), prix: n('#dqP'), livraison: n('#dqL'), envoyer: env,
+    const rue = f.$('#dqRue').value.trim(), cp = f.$('#dqCp').value.replace(/\s/g, ''), ville = f.$('#dqVille').value.trim();
+    if (!rue || !ville || !/^\d{5}$/.test(cp)) { toast('Complétez la rue, le code postal (5 chiffres) et la ville : Qonto en a besoin.', true); (!rue ? f.$('#dqRue') : !/^\d{5}$/.test(cp) ? f.$('#dqCp') : f.$('#dqVille')).focus(); return; }
+    occupe(f.$('#dqOk'), appel('crmDevisQonto', { clientId: c.ID, bidons: n('#dqB'), prix: n('#dqP'), livraison: n('#dqL'), envoyer: env, rue, cp, ville,
       objet: f.$('#dqO').value.trim(), message: f.$('#dqM').value, owner: S.moi })).then(rep => {
       const i = S.d.clients.findIndex(x => x.ID === c.ID); if (i >= 0) S.d.clients[i] = rep.client;
       if (!S.d.activites.some(a => a.ID === rep.activite.ID)) S.d.activites.push(rep.activite);
