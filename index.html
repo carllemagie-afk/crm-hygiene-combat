@@ -609,7 +609,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-0203';
+const VERSION_APP = '2026.10.31-0212';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -734,12 +734,18 @@ function signatureHtml(p, lienRdv, marque) {
   const rond = (contenu, l, classe) => '<td class="' + classe + '" width="' + l + '" valign="middle" style="width:' + l + 'px;">' + contenu + '</td>';
   // Téléphone (Gmail, Apple Mail) : cercles et logo plus petits, pour que la signature tienne dans la largeur de l'écran.
   const styleTelephone = '<style>@media screen and (max-width:480px){.hc-case{width:72px!important}.hc-photo{width:72px!important;height:72px!important;border-radius:36px!important;line-height:72px!important;font-size:26px!important}' +
-    '.hc-casel{width:74px!important}.hc-logo{width:74px!important;height:63px!important}.hc-texte{padding:0 10px!important}.hc-nom{font-size:16px!important;line-height:21px!important}' +
-    '.hc-petit{font-size:13px!important;line-height:19px!important}}</style>';
+    '.hc-casel{width:80px!important}.hc-logo{width:80px!important;height:69px!important}.hc-texte{padding:0 10px!important}.hc-nom{font-size:16px!important;line-height:21px!important}' +
+    '.hc-petit{font-size:13px!important;line-height:19px!important}}</style>' +
+    // Mode sombre (Apple Mail, Outlook) : logo au trait blanc à la place de l'écusson. Ailleurs (Gmail), l'écusson blanc reste lisible.
+    // Bloc à part : si une messagerie rejette ces règles, la mise en page téléphone ci-dessus est gardée.
+    '<style>@media (prefers-color-scheme:dark){.hc-logo-jour{display:none!important}.hc-logo-nuit{display:block!important;max-height:none!important;overflow:visible!important}}' +
+    '[data-ogsc] .hc-logo-jour{display:none!important}[data-ogsc] .hc-logo-nuit{display:block!important;max-height:none!important;overflow:visible!important}</style>';
   const photo = p.photo
     ? '<img src="' + e(p.photo) + '" class="hc-photo" width="108" height="108" alt="' + e(p.nom) + '" style="display:block;border:0;width:108px;height:108px;border-radius:54px;">'
     : '<div class="hc-photo" style="width:108px;height:108px;border-radius:54px;background-color:#afdbfc;text-align:center;' + police + 'font-size:36px;line-height:108px;font-weight:bold;color:#1a1a1a;">' + e(initiales) + '</div>';
-  const logo = '<img src="' + ADRESSE_IMAGES + 'signature-logo-blanc.png" class="hc-logo" width="127" height="108" alt="Hygiène &amp; Combat" style="display:block;border:0;width:127px;height:108px;">';
+  // Logo sur fond transparent : écusson blanc détouré (lisible sur fond clair comme sombre), version au trait blanc en mode sombre.
+  const logo = '<img src="' + ADRESSE_IMAGES + 'signature-logo-plaque.png" class="hc-logo hc-logo-jour" width="137" height="118" alt="Hygiène &amp; Combat" style="display:block;border:0;width:137px;height:118px;">' +
+    '<!--[if !mso]><!--><img src="' + ADRESSE_IMAGES + 'signature-logo-nuit.png" class="hc-logo hc-logo-nuit" width="137" height="118" alt="" style="display:none;max-height:0;overflow:hidden;border:0;width:137px;height:118px;"><!--<![endif]-->';
   const ligne = (icone, texte, lien) => '<tr><td class="hc-petit" style="' + police + 'font-size:15px;line-height:24px;font-weight:bold;color:#1a1a1a;padding-top:6px;white-space:nowrap;">' + icone + '&nbsp;' +
     '<a href="' + e(lien) + '" style="color:#1a1a1a;text-decoration:none;">' + e(texte) + '</a></td></tr>';
   const bouton = (lien, texte, fond, couleur) => '<a href="' + e(lien) + '" style="display:block;' + police + 'font-size:15px;line-height:20px;font-weight:bold;color:' + couleur +
@@ -755,7 +761,7 @@ function signatureHtml(p, lienRdv, marque) {
         (p.tel ? ligne('📞', p.tel, 'tel:' + tel) : '') +
         ligne('✉️', EMAIL_SIGNATURE, 'mailto:' + EMAIL_SIGNATURE) +
       '</table></td>' +
-      rond(logo, 127, 'hc-casel') +
+      rond(logo, 137, 'hc-casel') +
     '</tr></table></td></tr>' +
     '<tr><td style="border-top:1px solid #212024;padding-top:16px;"><table cellpadding="0" cellspacing="0" border="0" role="presentation" width="100%" style="border-collapse:collapse;"><tr>' +
       '<td width="50%" style="padding-right:6px;">' + (tel ? bouton('tel:' + tel, '📱 Appeler', '#5c8edc', '#ffffff') : '') + '</td>' +
