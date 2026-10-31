@@ -96,6 +96,18 @@
   @media (min-width: 960px) {
     .nav { display: flex; } .barre-mobile, .onglets-mobile { display: none; }
     main { padding: 30px 36px 48px; }
+    /* Barre de gauche : icônes seules (comme HubSpot) ; le nom apparaît au survol */
+    .nav { width: 68px; padding: 16px 10px; align-items: center; z-index: 40; }
+    .nav .marque { padding: 0 0 18px; justify-content: center; } .nav .marque > div { display: none; }
+    .nav button { width: 48px; justify-content: center; padding: 11px 0; }
+    .nav button .nom { display: none; }
+    .nav button.actif::before { left: -10px; }
+    .nav .nav-bas { width: 100%; justify-items: center; }
+    .nav .compteur { position: absolute; top: 2px; right: 0; margin: 0; font-size: 10px; line-height: 16px; min-width: 16px; padding: 0 4px; text-align: center; }
+    .nav .pied-nav { padding: 6px; background: none; justify-content: center; } .nav .pied-nav > div { display: none; }
+    .nav [data-nom] { position: relative; }
+    .nav [data-nom]:hover::after { content: attr(data-nom); position: absolute; left: calc(100% + 14px); top: 50%; transform: translateY(-50%); background: var(--ardoise-900);
+      color: #fff; font-size: 13px; font-weight: 500; padding: 6px 10px; border-radius: 8px; white-space: nowrap; pointer-events: none; box-shadow: 0 6px 20px rgba(0,0,0,.18); z-index: 60; }
   }
 
   /* ---------- Éléments ---------- */
@@ -241,7 +253,19 @@
     .fiche > .col-droite { grid-column: 2; }
     .fiche-onglets { display: none; }
   }
-  @media (min-width: 1360px) { .fiche { grid-template-columns: 340px minmax(0,1fr) 320px; } .fiche > .col-droite { grid-column: 3; grid-row: 1; } }
+  @media (min-width: 1200px) { .fiche { grid-template-columns: 340px minmax(0,1fr) 320px; } .fiche > .col-droite { grid-column: 3; grid-row: 1; } }
+  /* Fiche sur grand écran : la page ne bouge plus, chaque colonne défile seule (celle sous la souris), barre fine visible au survol */
+  @media (min-width: 1200px) {
+    body.mode-fiche main { max-width: none; height: 100vh; display: flex; flex-direction: column; overflow: hidden; padding: 20px 24px 0; }
+    body.mode-fiche main > .page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    body.mode-fiche .fiche { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+    body.mode-fiche .fiche > section { overflow-y: auto; overscroll-behavior: contain; padding: 2px 6px 28px; margin: 0 -6px;
+      scrollbar-width: thin; scrollbar-color: transparent transparent; transition: scrollbar-color .25s; }
+    body.mode-fiche .fiche > section:hover { scrollbar-color: rgba(29,40,46,.28) transparent; }
+    body.mode-fiche .fiche > section::-webkit-scrollbar { width: 8px; }
+    body.mode-fiche .fiche > section::-webkit-scrollbar-thumb { background: transparent; border-radius: 8px; }
+    body.mode-fiche .fiche > section:hover::-webkit-scrollbar-thumb { background: rgba(29,40,46,.28); }
+  }
   .profil { padding: 22px 20px 18px; }
   .profil .titre-edit { width: 100%; font-size: 21px; font-weight: 700; letter-spacing: -.01em; border: 1px solid transparent; border-radius: 8px; padding: 2px 6px; margin: 12px 0 0 -6px; background: transparent; }
   .profil .titre-edit:hover { border-color: var(--trait); }
@@ -637,7 +661,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-0259';
+const VERSION_APP = '2026.10.31-0309';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1237,12 +1261,12 @@ function menus() {
   const nb = { taches: tachesDuJour, emails: emailsATraiter().length };
   const actif = p => (S.page === p.id || (p.id === 'clients' && ['fiche', 'import'].includes(S.page)) || (p.id === 'emails' && S.page === 'sequence') ||
     (p.id === 'plus' && ['agenda', 'calculateur', 'stock', 'reglages'].includes(S.page))) ? 'actif' : '';
-  const bouton = p => '<button data-aller="' + p.id + '" class="' + actif(p) + '">' + ico(p.ico) + p.nom +
+  const bouton = p => '<button data-aller="' + p.id + '" data-nom="' + esc(p.nom) + '" aria-label="' + esc(p.nom) + '" class="' + actif(p) + '">' + ico(p.ico) + '<span class="nom">' + p.nom + '</span>' +
     (nb[p.id] ? '<span class="compteur' + (p.id === 'emails' ? ' alerte' : '') + '">' + nb[p.id] + '</span>' : '') + '</button>';
   $('#nav').innerHTML = '<div class="marque">' + BOUCLIER + '<div><b>HYGIÈNE &amp; COMBAT</b><span>CRM</span></div></div>' +
     PAGES.filter(p => !PAGES_BAS.includes(p.id)).map(bouton).join('') +
     '<div class="nav-bas">' + PAGES_BAS.map(id => bouton(PAGES.find(p => p.id === id))).join('') + '</div>' +
-    '<div class="pied-nav" data-aller="reglages">' + avatar(S.moi || '?', 's') + '<div><b style="font-size:13.5px">' + esc(S.moi) + '</b><small>' + esc(S.d.compte) + '</small></div></div>';
+    '<div class="pied-nav" data-aller="reglages" data-nom="' + esc(S.moi) + ' · Réglages">' + avatar(S.moi || '?', 's') + '<div><b style="font-size:13.5px">' + esc(S.moi) + '</b><small>' + esc(S.d.compte) + '</small></div></div>';
   $('#navMobile').innerHTML = PAGES.filter(p => p.mobile).concat([{ id: 'plus', nom: 'Plus', ico: 'menu' }]).map(p => '<button data-aller="' + p.id + '" class="' + actif(p) + '">' + ico(p.ico) + p.nom +
     (nb[p.id] ? '<span class="pastille-nb">' + nb[p.id] + '</span>' : '') + '</button>').join('');
   $('#barreMobile').innerHTML = BOUCLIER + '<b>HYGIÈNE &amp; COMBAT</b><span class="espace"></span>' + avatar(S.moi || '?', 's');
@@ -1269,6 +1293,7 @@ function aller(page, id) {
 }
 
 function afficher() {
+  document.body.classList.toggle('mode-fiche', S.page === 'fiche'); // grand écran : colonnes qui défilent séparément
   menus();
   const pages = { clients: pageClients, fiche: pageFiche, taches: pageTaches, agenda: pageAgenda, emails: pageEmails, sequence: pageSequence, reglages: pageReglages, import: pageImport,
     objectifs: pageObjectifs, stock: pageStock, calculateur: pageCalculateur };
@@ -1560,6 +1585,9 @@ function pageFiche() {
     (dernierClic(c.ID) ? '<span class="puce orange">' + ico('clic') + 'A cliqué ' + esc(ilYa(dernierClic(c.ID))) + '</span>' : '') +
     (ins ? '<span class="puce vert">' + ico('sequence') + 'En séquence</span>' : c['Séquence'] && !['En séquence', 'Répondu'].includes(c['Séquence']) ? '<span class="puce">' + ico('sequence') + esc(c['Séquence']) + '</span>' : '');
 
+  // Même fiche redessinée (enregistrement, temps réel) : chaque colonne reste où elle était.
+  const defil = S.ficheDefil === c.ID ? ['col-gauche', 'col-centre', 'col-droite'].map(k => ($('#page .fiche > .' + k) || {}).scrollTop || 0) : null;
+  S.ficheDefil = c.ID;
   $('#page').innerHTML = '<div class="page">' +
     '<div class="fil"><a href="#" id="retour">' + ico('retour') + 'Clients</a><span class="pale">/</span><span>' + esc(nomClient(c)) + '</span></div>' +
     bandeauTache(c) +
@@ -1596,6 +1624,8 @@ function pageFiche() {
     '</div></div>';
 
   $('#retour').onclick = e => { e.preventDefault(); aller('clients'); };
+  if (defil) ['col-gauche', 'col-centre', 'col-droite'].forEach((k, i) => { const z = $('#page .fiche > .' + k); if (z) z.scrollTop = defil[i]; });
+  if (defil) $('#page .page').style.animation = 'none'; // pas d'animation d'entrée quand la même fiche se redessine
   $$('[data-onglet]').forEach(b => b.onclick = () => { S.ongletFiche = b.dataset.onglet; pageFiche(); });
   $$('[data-champ]').forEach(i => i.onchange = () => enregistrerChamp(c.ID, i.dataset.champ, i.value, i));
   $$('[data-tag]').forEach(b => b.onclick = () => {
