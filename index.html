@@ -671,7 +671,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-0356';
+const VERSION_APP = '2026.10.31-0430';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1027,13 +1027,14 @@ function brancherRaisons(racine, tag, lire, ecrire, redessiner) {
 /** Même règle que le serveur : {{Champ}} remplacé, variable vide supprimée avec l'espace qui la précède. */
 function rendre(modele, vars) {
   return String(modele ?? '').replace(/( ?)\{\{\s*([^}]+?)\s*\}\}/g, (tout, espace, nom) => {
-    if (/^comparatif pdf$/i.test(nom)) return tout; // remplacé par la pièce jointe au moment de l'envoi
+    if (/^(comparatif|consommation) pdf$/i.test(nom)) return tout; // remplacé par la pièce jointe au moment de l'envoi
     const v = String(vars[nom] ?? '').trim();
     if (!v && /^lien rdv$/i.test(nom)) return tout; // lien pas encore réglé : on le garde visible (l'envoi le signale)
     return v ? espace + v : '';
   }).replace(/\n{3,}/g, '\n\n').trim();
 }
-const variables = (c, owner) => Object.assign({}, c, { Owner: owner || c.Owner || '', Responsable: owner || c.Owner || '', Entreprise: c.Salle, 'Lien RDV': lienRdvDe(owner || c.Owner) });
+const variables = (c, owner) => Object.assign({}, c, { Owner: owner || c.Owner || '', Responsable: owner || c.Owner || '', Entreprise: c.Salle, 'Lien RDV': lienRdvDe(owner || c.Owner),
+  'Durée commande': ((String((dernierConso(c.ID) || {}).Produit || '').match(/première commande ([^·]+)/) || [])[1] || '').trim() });
 /** Même règle que le serveur : lien de réservation de la personne qui envoie (/rdv/matthieu/ ou /rdv/carl/), jamais d'après une adresse e-mail. */
 function lienRdvDe(owner) {
   const prenom = s => String(s || '').trim().split(/\s+/)[0].normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -1635,7 +1636,7 @@ function pageFiche() {
             '<button class="btn fantome mini danger" id="suppr">' + ico('poubelle') + 'Supprimer</button></div>' +
         '</div></section>' +
       '<section class="col-centre' + (S.ongletFiche === 'activite' ? ' visible' : '') + '">' + carteActivite(c) + '</section>' +
-      '<section class="col-droite' + (S.ongletFiche === 'suivi' ? ' visible' : '') + '">' + carteComparatifs(c) + carteCommandes(c) + carteSequence(c, ins) + carteAVenir(c) + '</section>' +
+      '<section class="col-droite' + (S.ongletFiche === 'suivi' ? ' visible' : '') + '">' + carteComparatifs(c) + carteConso(c) + carteCommandes(c) + carteSequence(c, ins) + carteAVenir(c) + '</section>' +
     '</div></div>';
 
   $('#retour').onclick = e => { e.preventDefault(); aller('clients'); };
@@ -1852,10 +1853,23 @@ function fenetreCommande(c, x) {
 }
 
 // =================================================================== Comparateur produits
-const dernierComparatif = clientId => (S.d.comparatifs || []).filter(x => x.ClientID === clientId).sort((a, b) => String(b.Date).localeCompare(String(a.Date)))[0] || null;
+/** Calcul de consommation (calculateur) : rangé avec les comparatifs, « Produit » commençant par « Consommation ». */
+const estConso = x => /^Consommation/.test(String(x.Produit || ''));
+const dernierComparatif = clientId => (S.d.comparatifs || []).filter(x => x.ClientID === clientId && !estConso(x)).sort((a, b) => String(b.Date).localeCompare(String(a.Date)))[0] || null;
+const dernierConso = clientId => (S.d.comparatifs || []).filter(x => x.ClientID === clientId && estConso(x)).sort((a, b) => String(b.Date).localeCompare(String(a.Date)))[0] || null;
+
+/** Carte « Calcul de consommation » : PDF créés avec le calculateur (le dernier est joint aux e-mails {{Consommation PDF}}). */
+function carteConso(c) {
+  const liste = (S.d.comparatifs || []).filter(x => x.ClientID === c.ID && estConso(x)).sort((a, b) => String(b.Date).localeCompare(String(a.Date)));
+  return '<div class="carte"><div class="carte-tete"><h2>Calcul de consommation</h2><button class="btn mini principal" id="caOuvrir">' + ico('calcul') + 'Calculateur</button></div>' +
+    liste.map((x, n) => '<div class="ligne-cmd" style="cursor:default"><span class="bulle Comparatif">' + ico('calcul') + '</span><div style="flex:1;min-width:0"><b>1re commande : ' +
+      esc(((String(x.Produit).match(/première commande ([^·]+)/) || [])[1] || '').trim() || '—') + '</b>' +
+      '<div class="doux petit">' + esc(fmtDate(x.Date)) + (x.Auteur ? ' · ' + esc(String(x.Auteur).split(' ')[0]) : '') + (n === 0 ? ' · <span class="puce vert" style="padding:0 6px">joint aux e-mails</span>' : '') + '</div></div>' +
+      '<button class="btn mini" data-cp-voir="' + x.ID + '">Ouvrir</button><button class="btn fantome icone" data-cp-suppr="' + x.ID + '" aria-label="Supprimer">' + ico('poubelle') + '</button></div>').join('') + '</div>';
+}
 
 function carteComparatifs(c) {
-  const liste = (S.d.comparatifs || []).filter(x => x.ClientID === c.ID).sort((a, b) => String(b.Date).localeCompare(String(a.Date)));
+  const liste = (S.d.comparatifs || []).filter(x => x.ClientID === c.ID && !estConso(x)).sort((a, b) => String(b.Date).localeCompare(String(a.Date)));
   return '<div class="carte"><div class="carte-tete"><h2>Comparatifs produit</h2><button class="btn mini principal" id="cpOuvrir">' + ico('comparer') + 'Outil comparaison</button></div>' +
     (liste.length ? liste.map((x, n) => '<div class="ligne-cmd" style="cursor:default"><span class="bulle Comparatif">' + ico('comparer') + '</span><div style="flex:1;min-width:0"><b>H&amp;C / ' + esc(x.Produit || 'concurrent') + '</b>' +
         '<div class="doux petit">' + esc(fmtDate(x.Date)) + (x.Auteur ? ' · ' + esc(String(x.Auteur).split(' ')[0]) : '') + (n === 0 ? ' · <span class="puce vert" style="padding:0 6px">joint aux e-mails</span>' : '') + '</div></div>' +
@@ -1865,6 +1879,7 @@ function carteComparatifs(c) {
 
 function brancherComparatifs(c) {
   $('#cpOuvrir').onclick = () => ouvrirComparateur(c);
+  $('#caOuvrir').onclick = () => ouvrirCalculateur(c);
   $$('[data-cp-voir]').forEach(b => b.onclick = () => occupe(b, appel('crmLireComparatif', b.dataset.cpVoir)).then(r => {
     const octets = Uint8Array.from(atob(r.base64), x => x.charCodeAt(0));
     const url = URL.createObjectURL(new Blob([octets], { type: 'application/pdf' }));
@@ -1874,8 +1889,8 @@ function brancherComparatifs(c) {
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }));
-  $$('[data-cp-suppr]').forEach(b => b.onclick = () => confirmer('Supprimer ce comparatif ?', 'Le PDF sera retiré de la fiche. Les e-mails déjà envoyés ne changent pas.', 'Supprimer').then(ok => ok &&
-    (S.d.comparatifs = S.d.comparatifs.filter(x => x.ID !== b.dataset.cpSuppr), pageFiche(), toast('Comparatif supprimé'), enFond(appel('crmSupprimerComparatif', b.dataset.cpSuppr)))));
+  $$('[data-cp-suppr]').forEach(b => b.onclick = () => confirmer('Supprimer ce PDF ?', 'Le PDF sera retiré de la fiche. Les e-mails déjà envoyés ne changent pas.', 'Supprimer').then(ok => ok &&
+    (S.d.comparatifs = S.d.comparatifs.filter(x => x.ID !== b.dataset.cpSuppr), pageFiche(), toast('PDF supprimé'), enFond(appel('crmSupprimerComparatif', b.dataset.cpSuppr)))));
 }
 
 /** L'outil de comparaison s'ouvre en plein écran par-dessus la fiche ; « Enregistrer sur la fiche » range le PDF chez ce client. */
@@ -1900,6 +1915,8 @@ function adresseCalculateur(c) {
   const q = new URLSearchParams();
   if (c) {
     q.set('salle', nomClient(c));
+    q.set('client', c.ID);
+    q.set('nom', nomClient(c));
     const cle = Object.keys(c).find(k => /surface|m²/i.test(k) && Number(String(c[k]).replace(',', '.').replace(/[^\d.]/g, '')) > 0);
     if (cle) q.set('tatamis', String(c[cle]).replace(',', '.').replace(/[^\d.]/g, ''));
   }
@@ -1925,7 +1942,14 @@ function ouvrirCalculateur(c) {
   z.innerHTML = '<header>' + ico('calcul') + '<div><b>Calculateur de consommation</b><br><span>' + esc(nomClient(c)) + '</span></div><button class="btn mini" id="caFermer">' + ico('croix') + 'Fermer</button></header>' +
     '<iframe title="Calculateur de consommation" src="' + esc(adresseCalculateur(c)) + '"></iframe>';
   document.body.appendChild(z);
-  z.querySelector('#caFermer').onclick = () => z.remove();
+  // « Enregistrer sur la fiche » dans le calculateur : le PDF est rangé chez ce client (comme l'outil comparaison)
+  const recevoirMessage = e => {
+    if (e.origin !== location.origin || !e.data || e.data.type !== 'crm-comparatif') return;
+    if (e.data.comparatif) remplacer(S.d.comparatifs, e.data.comparatif);
+    toast('Calcul de consommation enregistré sur la fiche de ' + nomClient(c));
+  };
+  window.addEventListener('message', recevoirMessage);
+  z.querySelector('#caFermer').onclick = () => { window.removeEventListener('message', recevoirMessage); z.remove(); S.ongletFiche = 'suivi'; if (S.page === 'fiche') pageFiche(); };
 }
 
 /**
@@ -2111,10 +2135,11 @@ function fenetreEmail(c, apresEnvoi, brouillon) {
   if (brouillon) { f.$('#emObjet').value = brouillon.objet; f.$('#emCorps').value = brouillon.corps; f.$('#emOwner').value = brouillon.owner; signature(); }
   // {{Comparatif PDF}} dans le message : le dernier comparatif de la fiche part en pièce jointe
   const piece = () => {
-    const joint = /\{\{\s*comparatif pdf\s*\}\}/i.test(f.$('#emCorps').value);
-    const comp = dernierComparatif(c.ID);
-    f.$('#emPiece').innerHTML = !joint ? '' : comp ? '<div class="piece-jointe">' + ico('comparer') + '<span>Pièce jointe : <b>' + esc(comp.Fichier) + '</b> (' + esc(fmtDate(comp.Date)) + ')</span></div>'
-      : '<div class="piece-jointe manque">' + ico('alerte') + '<span>Aucun comparatif sur cette fiche : créez-le avec « Comparer » avant d’envoyer.</span></div>';
+    const corps = f.$('#emCorps').value;
+    const ligne = (veut, x, icone, manque) => !veut ? '' : x ? '<div class="piece-jointe">' + ico(icone) + '<span>Pièce jointe : <b>' + esc(x.Fichier) + '</b> (' + esc(fmtDate(x.Date)) + ')</span></div>'
+      : '<div class="piece-jointe manque">' + ico('alerte') + '<span>' + manque + '</span></div>';
+    f.$('#emPiece').innerHTML = ligne(/\{\{\s*comparatif pdf\s*\}\}/i.test(corps), dernierComparatif(c.ID), 'comparer', 'Aucun comparatif sur cette fiche : créez-le avec « Comparer » avant d’envoyer.') +
+      ligne(/\{\{\s*consommation pdf\s*\}\}/i.test(corps), dernierConso(c.ID), 'calcul', 'Aucun calcul de consommation sur cette fiche : créez-le avec « Conso » avant d’envoyer.');
   };
   f.$('#emCorps').addEventListener('input', piece);
   f.$('#emModele').addEventListener('change', piece);

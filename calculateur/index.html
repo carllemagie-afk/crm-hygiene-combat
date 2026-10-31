@@ -4,81 +4,58 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Calculateur de consommation · Hygiène & Combat</title>
-<meta name="description" content="Combien de désinfectant Hygiène & Combat votre salle utilise-t-elle ? Durée d'un bidon, d'un carton, et quantité à commander pour l'année.">
+<meta name="description" content="Combien de temps dure votre commande de désinfectant Hygiène & Combat ?">
 <!--
-  Calculateur de consommation Hygiène & Combat : page autonome, prévue pour être intégrée plus tard
-  dans le CRM (comme le comparateur, dans un cadre) et sur le site client.
+  Calculateur de consommation Hygiène & Combat (copié dans l'application par build.py, https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec remplacé).
+  Ouvert depuis le CRM : menu « Calculateur », ou bouton « Conso » d'une fiche (?client=ID&nom=…&salle=…).
+  « Créer le PDF client » fabrique le PDF ; depuis une fiche, « Enregistrer sur la fiche » le range chez le client
+  (comme l'outil comparaison) : il peut alors être joint aux e-mails avec {{Consommation PDF}}.
 
-  Paramètres d'adresse (tous facultatifs) :
-    ?client=1              vue client : les hypothèses de dosage et de prix ne sont plus modifiables
-    ?prix=non              masque les prix
-    ?tatamis=150&parjour=2&jours=6   pré-remplit le formulaire (ex. depuis une fiche client)
-    ?salle=Boxing%20Club   affiche le nom de la salle dans le titre et le résumé
+  Paramètres d'adresse (facultatifs) : ?tatamis=200&jours=6&parjour=1 (pré-remplissage), ?salle=…, ?client=ID&nom=…
 -->
 <style>
-  :root {
-    --encre: #13181a; --bleu: #264963; --ciel: #8bc4e4; --pale: #eaf4fa; --fond: #ffffff; --doux: #5b6b75; --trait: #d3e6f2;
-  }
+  :root { --encre: #13181a; --bleu: #264963; --ciel: #8bc4e4; --pale: #eaf4fa; --doux: #5b6b75; --trait: #d3e6f2; }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
-  body { margin: 0; background: var(--fond); color: var(--encre); font: 15px/1.5 "Avenir Next", Avenir, "Segoe UI", system-ui, -apple-system, sans-serif; }
-  main { max-width: 1040px; margin: 0 auto; padding: 28px 20px 48px; }
-  header { display: flex; align-items: center; gap: 18px; margin-bottom: 26px; }
-  header img { width: 76px; height: auto; flex: none; }
-  .surtitre { text-transform: uppercase; letter-spacing: 1.6px; font-size: 11px; font-weight: 600; color: var(--bleu); }
-  h1 { margin: 2px 0 4px; font-size: 26px; line-height: 1.2; letter-spacing: -.3px; }
-  header p { margin: 0; color: var(--doux); }
-  .grille { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 22px; align-items: start; }
-  .panneau { border: 1px solid var(--trait); border-radius: 14px; padding: 20px; background: #fff; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--bleu); margin: 0 0 14px; }
+  body { margin: 0; background: #fff; color: var(--encre); font: 15px/1.45 "Avenir Next", Avenir, "Segoe UI", system-ui, -apple-system, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 18px 18px 24px; }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+  header img { width: 56px; height: auto; flex: none; }
+  .surtitre { text-transform: uppercase; letter-spacing: 1.4px; font-size: 11px; font-weight: 600; color: var(--bleu); }
+  h1 { margin: 1px 0 0; font-size: 22px; line-height: 1.2; letter-spacing: -.2px; }
+  .grille { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 18px; align-items: start; }
+  .panneau { border: 1px solid var(--trait); border-radius: 14px; padding: 16px; }
   .champ { display: block; margin-bottom: 14px; }
+  .champ:last-child { margin-bottom: 0; }
   .champ > span { display: block; font-weight: 600; font-size: 14px; margin-bottom: 5px; }
-  .champ small { display: block; color: var(--doux); font-size: 12.5px; margin-top: 4px; }
-  .saisie { display: flex; align-items: center; border: 1px solid var(--ciel); border-radius: 9px; overflow: hidden; background: #fff; }
+  .saisie { display: flex; align-items: center; border: 1px solid var(--ciel); border-radius: 9px; overflow: hidden; }
   .saisie:focus-within { outline: 2px solid var(--bleu); outline-offset: 1px; }
-  .saisie input { flex: 1; min-width: 0; border: 0; padding: 10px 12px; font: inherit; font-size: 16px; color: var(--encre); background: transparent; outline: none; }
-  .saisie em { font-style: normal; color: var(--doux); padding-right: 12px; font-size: 14px; }
+  .saisie input { flex: 1; min-width: 0; border: 0; padding: 9px 10px; font: inherit; font-size: 16px; text-align: center; color: var(--encre); background: transparent; outline: none; }
+  .saisie em { font-style: normal; color: var(--doux); padding-right: 10px; font-size: 13.5px; }
   .saisie button { border: 0; background: var(--pale); color: var(--bleu); font-size: 20px; width: 40px; align-self: stretch; cursor: pointer; }
   .saisie button:hover { background: var(--ciel); }
   .puces { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
-  .puces button { border: 1px solid var(--ciel); background: #fff; color: var(--bleu); border-radius: 20px; padding: 4px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
+  .puces button { border: 1px solid var(--ciel); background: #fff; color: var(--bleu); border-radius: 20px; padding: 3px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
   .puces button[aria-pressed="true"] { background: var(--bleu); border-color: var(--bleu); color: #fff; }
-  details { border-top: 1px solid var(--trait); margin-top: 6px; padding-top: 12px; }
-  summary { cursor: pointer; font-weight: 600; color: var(--bleu); font-size: 14px; }
-  .deux { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; margin-top: 12px; }
-  .hypotheses-texte { color: var(--doux); font-size: 13px; margin: 10px 0 0; }
-  .reco { background: var(--bleu); color: #fff; border-radius: 14px; padding: 22px; margin-bottom: 16px; }
+  .reco { background: var(--bleu); color: #fff; border-radius: 14px; padding: 22px 24px; }
   .reco .surtitre { color: var(--ciel); }
-  .reco .grand { font-size: 30px; font-weight: 700; line-height: 1.15; margin: 6px 0 6px; letter-spacing: -.3px; }
-  .reco p { margin: 0; color: #dcecf6; }
-  .cartes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
-  .carte { border: 1px solid var(--trait); border-radius: 12px; padding: 14px; background: var(--pale); }
-  .carte .titre { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--bleu); font-weight: 600; }
-  .carte .valeur { font-size: 22px; font-weight: 700; margin: 4px 0 2px; line-height: 1.2; }
-  .carte .detail { font-size: 13px; color: var(--doux); }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--trait); vertical-align: top; }
-  th { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--bleu); font-weight: 600; }
-  td.n, th.n { text-align: right; white-space: nowrap; }
-  .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
-  .bouton { border: 0; border-radius: 9px; background: var(--bleu); color: #fff; font: inherit; font-weight: 600; padding: 10px 16px; cursor: pointer; }
+  .reco .grand { font-size: 44px; font-weight: 700; line-height: 1.1; margin: 6px 0 8px; letter-spacing: -.5px; }
+  .reco p { margin: 0; color: #dcecf6; font-size: 14px; }
+  .cartes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+  .carte { border: 1px solid var(--trait); border-radius: 12px; padding: 12px 14px; background: var(--pale); }
+  .carte .titre { font-size: 11.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--bleu); font-weight: 600; }
+  .carte .valeur { font-size: 20px; font-weight: 700; margin: 3px 0 0; line-height: 1.2; }
+  .carte .detail { font-size: 12.5px; color: var(--doux); }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+  .bouton { border: 0; border-radius: 9px; background: var(--bleu); color: #fff; font: inherit; font-weight: 600; padding: 10px 16px; cursor: pointer; text-decoration: none; display: inline-block; }
   .bouton.leger { background: var(--pale); color: var(--bleu); }
-  .note { color: var(--doux); font-size: 12.5px; margin-top: 16px; }
-  .ok { color: var(--bleu); font-size: 13px; }
-  .sans-prix .prix { display: none !important; }
-  @media (max-width: 820px) {
+  .bouton:disabled { opacity: .6; cursor: default; }
+  .statut { font-size: 13.5px; color: var(--doux); }
+  .statut.erreur { color: #b42318; }
+  @media (max-width: 760px) {
     .grille { grid-template-columns: minmax(0, 1fr); }
     .cartes { grid-template-columns: minmax(0, 1fr); }
-    h1 { font-size: 22px; }
-    header { flex-direction: column; align-items: flex-start; gap: 10px; }
-    header img { width: 64px; }
-    .reco .grand { font-size: 25px; }
-  }
-  @media print {
-    .actions, .puces, .saisie button, details summary { display: none !important; }
-    details { display: block; }
-    .reco { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .grille { grid-template-columns: 1fr 1fr; }
+    .reco .grand { font-size: 36px; }
   }
 </style>
 </head>
@@ -88,214 +65,202 @@
     <img src="logo.png" alt="Hygiène & Combat" width="127" height="108">
     <div>
       <div class="surtitre">Calculateur de consommation</div>
-      <h1 id="titre">Combien de désinfectant pour votre salle ?</h1>
-      <p>Indiquez votre surface et votre rythme de nettoyage : vous obtenez la durée d'un bidon, d'un carton, et ce qu'il faut commander pour l'année.</p>
+      <h1 id="titre">Combien de temps dure votre commande ?</h1>
     </div>
   </header>
 
   <div class="grille">
-    <section class="panneau" aria-labelledby="h-salle">
-      <h2 id="h-salle">Votre salle</h2>
-
+    <section class="panneau" aria-label="Votre salle">
       <label class="champ"><span>Surface de tatamis</span>
-        <div class="saisie"><button type="button" data-pas="-10" aria-label="Moins 10 m²">−</button><input id="tatamis" type="number" inputmode="decimal" min="0" step="1" value="100"><em>m²</em><button type="button" data-pas="10" aria-label="Plus 10 m²">+</button></div>
-        <small>Tous les tapis au sol, y compris l'espace de grappling.</small>
+        <div class="saisie"><button type="button" data-pas="-10" aria-label="Moins 10 m²">−</button><input id="tatamis" type="number" inputmode="decimal" min="0" step="1" value="200"><em>m²</em><button type="button" data-pas="10" aria-label="Plus 10 m²">+</button></div>
       </label>
-
-      <label class="champ"><span>Nettoyages par jour d'ouverture</span>
-        <div class="saisie"><button type="button" data-pas="-1" aria-label="Moins un nettoyage">−</button><input id="parjour" type="number" inputmode="decimal" min="0" step="1" value="1"><em>fois</em><button type="button" data-pas="1" aria-label="Plus un nettoyage">+</button></div>
-        <div class="puces" data-cible="parjour">
-          <button type="button" data-valeur="1">En fin de journée</button>
-          <button type="button" data-valeur="2">Midi et soir</button>
-          <button type="button" data-valeur="4">Après chaque cours (≈ 4)</button>
-        </div>
-      </label>
-
-      <label class="champ"><span>Jours d'ouverture par semaine</span>
+      <label class="champ"><span>Jours d'entraînement par semaine</span>
         <div class="saisie"><button type="button" data-pas="-1" aria-label="Moins un jour">−</button><input id="jours" type="number" inputmode="decimal" min="0" max="7" step="1" value="6"><em>jours</em><button type="button" data-pas="1" aria-label="Plus un jour">+</button></div>
       </label>
-
-      <details id="hypotheses">
-        <summary>Hypothèses de dosage<span class="prix"> et de prix</span></summary>
-        <div class="deux">
-          <label class="champ"><span>Solution pour 100 m²</span><div class="saisie"><input id="lpar100" type="number" inputmode="decimal" min="0.1" step="0.1" value="2"><em>L</em></div></label>
-          <label class="champ"><span>Dilution</span><div class="saisie"><input id="dilution" type="number" inputmode="decimal" min="0.1" step="0.5" value="5"><em>%</em></div></label>
-          <label class="champ"><span>Volume d'un bidon</span><div class="saisie"><input id="bidon" type="number" inputmode="decimal" min="0.1" step="1" value="5"><em>L</em></div></label>
-          <label class="champ"><span>Bidons par carton</span><div class="saisie"><input id="parcarton" type="number" inputmode="decimal" min="1" step="1" value="4"><em>bidons</em></div></label>
-          <label class="champ prix"><span>Prix d'un bidon</span><div class="saisie"><input id="prixbidon" type="number" inputmode="decimal" min="0" step="0.01" value="33"><em>€ HT</em></div></label>
+      <label class="champ"><span>Nettoyages par jour</span>
+        <div class="saisie"><button type="button" data-pas="-1" aria-label="Moins un nettoyage">−</button><input id="parjour" type="number" inputmode="decimal" min="0" step="1" value="1"><em>fois</em><button type="button" data-pas="1" aria-label="Plus un nettoyage">+</button></div>
+        <div class="puces" data-cible="parjour">
+          <button type="button" data-valeur="1">Fin de journée</button>
+          <button type="button" data-valeur="2">Midi et soir</button>
+          <button type="button" data-valeur="4">Après chaque cours</button>
         </div>
-        <p class="hypotheses-texte" id="hypo-texte"></p>
-      </details>
+      </label>
     </section>
 
-    <section aria-live="polite" aria-labelledby="h-resultat">
-      <h2 id="h-resultat" class="surtitre" style="margin-bottom:10px">Résultat</h2>
+    <section aria-live="polite" aria-label="Résultat">
       <div class="reco">
-        <div class="surtitre">À commander pour l'année</div>
-        <div class="grand" id="r-commande"></div>
-        <p id="r-rythme"></p>
+        <div class="surtitre">Votre première commande vous durera</div>
+        <div class="grand" id="r-commande">—</div>
+        <p id="r-pour"></p>
       </div>
-
       <div class="cartes">
-        <div class="carte"><div class="titre">Un bidon dure</div><div class="valeur" id="r-bidon"></div><div class="detail" id="r-bidon-d"></div></div>
-        <div class="carte"><div class="titre">Un carton dure</div><div class="valeur" id="r-carton"></div><div class="detail" id="r-carton-d"></div></div>
-        <div class="carte"><div class="titre">Par nettoyage</div><div class="valeur" id="r-dose"></div><div class="detail" id="r-dose-d"></div></div>
+        <div class="carte"><div class="titre">Un bidon dure</div><div class="valeur" id="r-bidon">—</div></div>
+        <div class="carte"><div class="titre">Coût par mois</div><div class="valeur" id="r-mois">—</div><div class="detail">hors livraison</div></div>
+        <div class="carte"><div class="titre">Par nettoyage</div><div class="valeur" id="r-dose">—</div><div class="detail" id="r-dose-d"></div></div>
       </div>
-
-      <div class="panneau">
-        <table>
-          <thead><tr><th>Consommation</th><th class="n">Produit pur</th><th class="n">Bidons</th><th class="n prix">Coût HT</th></tr></thead>
-          <tbody id="r-tableau"></tbody>
-        </table>
-        <p class="note">Les mois sont une moyenne sur l'année (fermetures comprises). Coût produit uniquement, hors livraison.</p>
-      </div>
-
       <div class="actions">
-        <button class="bouton" type="button" id="copier">Copier le résumé</button>
-        <button class="bouton leger" type="button" id="imprimer">Imprimer / PDF</button>
-        <span class="ok" id="copie-ok" hidden>Résumé copié.</span>
+        <button class="bouton" type="button" id="pdf">Créer le PDF client</button>
+        <span class="statut" id="statut"></span>
       </div>
     </section>
   </div>
-
-  <p class="note">Estimation basée sur la dose conseillée par Hygiène & Combat : 2 L de solution diluée à 5 % pour 100 m² (soit 100 ml de produit pur), appliquée au pulvérisateur, 5 minutes d'action, sans rinçage. La consommation réelle dépend de la méthode (pulvérisateur, serpillière) et de l'état des surfaces.</p>
 </main>
 
+<script src="../comparateur/pdf-lib.js"></script>
+<script src="../comparateur/fontkit.js"></script>
 <script>
 (() => {
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
-  const vueClient = params.get('client') === '1';
-  const avecPrix = params.get('prix') !== 'non';
-  const CHAMPS = ['tatamis', 'parjour', 'jours', 'lpar100', 'dilution', 'bidon', 'parcarton', 'prixbidon'];
+  // Dosage et prix Hygiène & Combat (fixes) : 2 L de solution à 5 % pour 100 m² ; bidon de 5 L à 33 € HT ; 1re commande = 1 carton de 4 bidons.
+  const SOLUTION_M2 = 0.02, DILUTION = 0.05, BIDON = 5, PREMIERE_COMMANDE = 4, PRIX_BIDON = 33;
+  const CRM_API = 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec';
+  const CRM_CLIENT = params.get('client') || '', CRM_NOM = params.get('nom') || '';
+  const salle = (params.get('salle') || CRM_NOM || '').trim();
 
-  // Pré-remplissage depuis l'adresse (ex. lien depuis une fiche client du CRM)
-  CHAMPS.forEach(c => { if (params.has(c) && params.get(c) !== '' && !isNaN(Number(params.get(c)))) $(c).value = params.get(c); });
-  const salle = (params.get('salle') || '').trim();
-  if (salle) $('titre').textContent = 'Consommation de désinfectant · ' + salle;
-  if (!avecPrix) document.body.classList.add('sans-prix');
-  if (vueClient) document.querySelectorAll('#hypotheses input').forEach(i => { i.readOnly = true; i.tabIndex = -1; });
+  ['tatamis', 'jours', 'parjour'].forEach(c => { if (params.has(c) && params.get(c) !== '' && !isNaN(Number(params.get(c)))) $(c).value = params.get(c); });
+  if (salle) $('titre').textContent = salle + ' : combien de temps dure votre commande ?';
 
   const num = id => Math.max(0, Number(String($(id).value).replace(',', '.')) || 0);
   const nf = (n, d = 0) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
-  const euros = n => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: n < 10 ? 2 : 0, maximumFractionDigits: n < 10 ? 2 : 0 });
-  const litres = l => l >= 10 ? nf(l, 0) + ' L' : l >= 1 ? nf(l, 1) + ' L' : nf(l * 1000, 0) + ' ml';
-  const pluriel = (n, mot, motPluriel) => n + ' ' + (n > 1 ? (motPluriel || mot + 's') : mot);
-
-  /** Durée en temps réel (semaines d'ouverture → calendrier), en semaines ou en mois. */
-  function duree(semainesOuvertes, semainesParAn) {
-    if (!isFinite(semainesOuvertes)) return '—';
-    const semaines = semainesOuvertes * 52 / semainesParAn;
-    if (semaines < 1) return '≈ ' + pluriel(Math.max(1, Math.round(semaines * 7)), 'jour');
-    if (semaines < 9) return '≈ ' + pluriel(Math.round(semaines), 'semaine');
+  const litres = l => l >= 1 ? nf(l, l % 1 ? 1 : 0) + ' L' : nf(l * 1000, 0) + ' ml';
+  const pluriel = (n, mot) => n + ' ' + (n > 1 ? mot + 's' : mot);
+  /** Durée parlante (semaines, puis mois). */
+  function duree(semaines) {
+    if (!isFinite(semaines) || semaines <= 0) return '—';
+    if (semaines < 1) return pluriel(Math.max(1, Math.round(semaines * 7)), 'jour');
+    if (semaines < 6) return pluriel(Math.round(semaines), 'semaine');
     const mois = semaines * 12 / 52;
     if (mois >= 24) return 'plus de 2 ans';
     const arrondi = Math.round(mois * 2) / 2;
-    return '≈ ' + nf(arrondi, arrondi % 1 ? 1 : 0) + ' mois';
+    return nf(arrondi, arrondi % 1 ? 1 : 0) + ' mois';
   }
 
+  let r = {};
   function calculer() {
-    const surface = num('tatamis');
-    const parJour = num('parjour'), jours = Math.min(7, num('jours')), semaines = 52; // ouvert toutes les semaines, toute l'année
-    const solutionM2 = num('lpar100') / 100, dilution = num('dilution') / 100;
-    const bidon = num('bidon') || 5, parCarton = Math.max(1, Math.round(num('parcarton')) || 4), prix = num('prixbidon');
-    const carton = bidon * parCarton;
-
-    const solutionParNettoyage = surface * solutionM2;          // L de solution prête à l'emploi
-    const produitParNettoyage = solutionParNettoyage * dilution; // L de produit pur
-    const nettoyagesSemaine = parJour * jours;
-    const produitSemaine = produitParNettoyage * nettoyagesSemaine;
-    const produitAn = produitSemaine * semaines;
-    const produitMois = produitAn / 12;
-    const bidonsAn = produitAn / bidon;
-    const cartonsAn = produitAn > 0 ? Math.ceil(bidonsAn / parCarton - 1e-9) : 0;
-    const semainesParBidon = produitSemaine > 0 ? bidon / produitSemaine : Infinity;
-    const semainesParCarton = produitSemaine > 0 ? carton / produitSemaine : Infinity;
-    const prixLitre = prix / bidon;
-
-    // Recommandation
-    if (!produitAn) {
-      $('r-commande').textContent = 'Indiquez une surface et un rythme';
-      $('r-rythme').textContent = 'Le calcul se met à jour au fur et à mesure.';
-    } else {
-      $('r-commande').textContent = pluriel(cartonsAn, 'carton') + ' de ' + parCarton + ' bidons';
-      const cartonsMois = semaines / (12 * semainesParCarton); // cartons par mois du calendrier
-      const d = duree(semainesParCarton, semaines);
-      const rythme = cartonsMois >= 1.5
-        ? 'Soit environ ' + nf(Math.round(cartonsMois * 2) / 2, (Math.round(cartonsMois * 2) / 2) % 1 ? 1 : 0) + ' cartons par mois.'
-        : d === 'plus de 2 ans' ? 'Un seul carton vous dure plus de deux ans.'
-        : d === '≈ 1 mois' ? 'Soit 1 carton par mois environ.'
-        : 'Soit 1 carton tous les ' + d.replace('≈ ', '') + ' environ.';
-      const marge = cartonsAn * parCarton - bidonsAn;
-      $('r-rythme').textContent = rythme + ' Vous consommez ' + nf(bidonsAn, 1) + (bidonsAn < 2 ? ' bidon' : ' bidons') + ' sur l\'année' +
-        (marge >= 0.5 ? ' : il vous restera environ ' + nf(marge, 1) + ' bidon' + (marge >= 1.5 ? 's' : '') + ' d\'avance.' : '.') +
-        (avecPrix && prix ? ' Budget annuel : ' + euros(cartonsAn * parCarton * prix) + ' HT.' : '');
-    }
-
-    $('r-bidon').textContent = produitSemaine ? duree(semainesParBidon, semaines) : '—';
-    $('r-bidon-d').textContent = 'Bidon de ' + nf(bidon, 0) + ' L = ' + nf(bidon / (dilution || 1), 0) + ' L de solution' + (surface ? ', ' + pluriel(Math.floor(bidon / (produitParNettoyage || 1)), 'nettoyage') : '');
-    $('r-carton').textContent = produitSemaine ? duree(semainesParCarton, semaines) : '—';
-    $('r-carton-d').textContent = parCarton + ' bidons = ' + nf(carton, 0) + ' L de produit';
-    $('r-dose').textContent = solutionParNettoyage ? litres(solutionParNettoyage) : '—';
-    $('r-dose-d').textContent = solutionParNettoyage ? 'de solution : ' + litres(produitParNettoyage) + ' de produit + ' + litres(solutionParNettoyage - produitParNettoyage) + ' d\'eau, pour ' + nf(surface, 0) + ' m²' : 'Indiquez une surface';
-
-    const lignes = [
-      ['Par nettoyage', produitParNettoyage],
-      ['Par semaine d\'ouverture', produitSemaine],
-      ['Par mois (moyenne)', produitMois],
-      ['Par an', produitAn],
-    ];
-    $('r-tableau').innerHTML = lignes.map(([nom, l]) =>
-      '<tr><td>' + nom + '</td><td class="n">' + (l ? litres(l) : '—') + '</td><td class="n">' + (l ? nf(l / bidon, l / bidon < 1 ? 2 : 1) : '—') + '</td><td class="n prix">' + (l && prix ? euros(l * prixLitre) : '—') + '</td></tr>').join('');
-
-    const court = n => nf(n, n % 1 ? 1 : 0);
-    $('hypo-texte').textContent = 'Dose : ' + court(num('lpar100')) + ' L de solution pour 100 m², diluée à ' + court(num('dilution')) + ' %. ' +
-      'Un bidon de ' + nf(bidon, 0) + ' L donne ' + nf(bidon / (dilution || 1), 0) + ' L de solution, soit ' + nf(bidon / (dilution || 1) / (solutionM2 || 1), 0) + ' m² nettoyés.' +
-      (avecPrix && prix ? ' Prix : ' + euros(prix) + ' HT le bidon, soit ' + euros(prixLitre * dilution * solutionM2 * 100) + ' HT pour 100 m².' : '');
-
-    // Résumé à copier (e-mail, devis, note CRM)
-    resume = [
-      'Consommation estimée' + (salle ? ' · ' + salle : '') + ' (désinfectant Hygiène & Combat)',
-      '',
-      'Surface : ' + nf(surface, 0) + ' m² · ' + pluriel(parJour, 'nettoyage') + ' par jour · ' + jours + ' j/semaine, toute l\'année',
-      'Par nettoyage : ' + litres(solutionParNettoyage) + ' de solution (' + litres(produitParNettoyage) + ' de produit + eau)',
-      'Un bidon de ' + nf(bidon, 0) + ' L dure ' + duree(semainesParBidon, semaines) + ', un carton de ' + parCarton + ' bidons ' + duree(semainesParCarton, semaines),
-      'Consommation : ' + litres(produitMois) + ' de produit par mois en moyenne, ' + litres(produitAn) + ' par an (' + nf(bidonsAn, 1) + ' bidons)',
-      'À commander : ' + pluriel(cartonsAn, 'carton') + ' de ' + parCarton + ' bidons pour l\'année' + (avecPrix && prix ? ' (' + euros(cartonsAn * parCarton * prix) + ' HT)' : ''),
-    ].join('\n');
+    const surface = num('tatamis'), jours = Math.min(7, num('jours')), parJour = num('parjour');
+    const solution = surface * SOLUTION_M2, produit = solution * DILUTION; // par nettoyage
+    const parSemaine = produit * parJour * jours;
+    r = {
+      surface, jours, parJour, solution, produit,
+      commande: parSemaine ? duree(PREMIERE_COMMANDE * BIDON / parSemaine) : '—',
+      bidon: parSemaine ? duree(BIDON / parSemaine) : '—',
+      mois: parSemaine * 52 / 12 * PRIX_BIDON / BIDON,
+    };
+    r.pour = 'Pour ' + nf(surface, 0) + ' m² de tatamis, ' + pluriel(jours, 'jour') + ' par semaine, ' + pluriel(parJour, 'nettoyage') + ' par jour.';
+    $('r-commande').textContent = parSemaine ? '≈ ' + r.commande : 'Indiquez votre salle';
+    $('r-pour').textContent = parSemaine ? r.pour : 'Le calcul se met à jour au fur et à mesure.';
+    $('r-bidon').textContent = parSemaine ? '≈ ' + r.bidon : '—';
+    $('r-mois').textContent = parSemaine ? '≈ ' + nf(Math.round(r.mois), 0) + ' € HT' : '—';
+    $('r-dose').textContent = solution ? litres(solution) : '—';
+    $('r-dose-d').textContent = solution ? 'de solution, soit ' + litres(produit) + ' de produit' : '';
+    $('pdf').disabled = !parSemaine;
   }
-  let resume = '';
 
-  // Saisie
-  CHAMPS.forEach(c => $(c).addEventListener('input', () => { majPuces(); calculer(); }));
+  ['tatamis', 'jours', 'parjour'].forEach(c => $(c).addEventListener('input', () => { majPuces(); calculer(); oublierPdf(); }));
   document.querySelectorAll('[data-pas]').forEach(b => b.addEventListener('click', () => {
     const i = b.parentElement.querySelector('input');
     const v = Math.max(Number(i.min) || 0, (Number(i.value) || 0) + Number(b.dataset.pas));
     i.value = i.max ? Math.min(Number(i.max), v) : v;
-    majPuces(); calculer();
+    majPuces(); calculer(); oublierPdf();
   }));
   document.querySelectorAll('.puces button').forEach(b => b.addEventListener('click', () => {
-    const i = $(b.parentElement.dataset.cible);
-    if ('valeur' in b.dataset) i.value = b.dataset.valeur;
-    else if ('zero' in b.dataset) i.value = 0;
-    else i.value = (Number(i.value) || 0) + Number(b.dataset.ajout);
-    majPuces(); calculer();
+    $(b.parentElement.dataset.cible).value = b.dataset.valeur;
+    majPuces(); calculer(); oublierPdf();
   }));
   function majPuces() {
     document.querySelectorAll('.puces[data-cible="parjour"] button').forEach(b => b.setAttribute('aria-pressed', String(Number($('parjour').value) === Number(b.dataset.valeur))));
   }
 
-  $('copier').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(resume); }
-    catch (e) { const t = document.createElement('textarea'); t.value = resume; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
-    $('copie-ok').hidden = false; setTimeout(() => { $('copie-ok').hidden = true; }, 2500);
+  // ---------------------------------------------------------------- PDF client
+  const statut = (html, erreur) => { $('statut').innerHTML = html; $('statut').className = 'statut' + (erreur ? ' erreur' : ''); };
+  let urlPdf = '';
+  function oublierPdf() { if (urlPdf) { URL.revokeObjectURL(urlPdf); urlPdf = ''; statut(''); } }
+  const octets = async chemin => new Uint8Array(await (await fetch(chemin)).arrayBuffer());
+
+  async function creerPdf() {
+    const { PDFDocument, rgb } = PDFLib;
+    const doc = await PDFDocument.create();
+    doc.registerFontkit(fontkit);
+    const [reg, gras, logo] = await Promise.all([octets('../comparateur/font-regular.ttf'), octets('../comparateur/font-bold.ttf'), octets('logo.png')]);
+    const fR = await doc.embedFont(reg, { subset: true }), fB = await doc.embedFont(gras, { subset: true }), img = await doc.embedPng(logo);
+    doc.setTitle('Votre consommation de désinfectant' + (salle ? ' · ' + salle : ''));
+    doc.setAuthor('Hygiène & Combat');
+    const page = doc.addPage([595.28, 841.89]);
+    const W = 595.28, M = 48, L = W - 2 * M;
+    const bleu = rgb(38 / 255, 73 / 255, 99 / 255), ciel = rgb(139 / 255, 196 / 255, 228 / 255), pale = rgb(234 / 255, 244 / 255, 250 / 255);
+    const encre = rgb(19 / 255, 24 / 255, 26 / 255), doux = rgb(91 / 255, 107 / 255, 117 / 255), clair = rgb(220 / 255, 236 / 255, 246 / 255), blanc = rgb(1, 1, 1);
+    const texte = (t, x, y, taille, police, couleur) => page.drawText(t, { x, y, size: taille, font: police, color: couleur });
+    const centre = (t, cx, y, taille, police, couleur) => texte(t, cx - police.widthOfTextAtSize(t, taille) / 2, y, taille, police, couleur);
+
+    // En-tête
+    const hLogo = 62, lLogo = img.width * hLogo / img.height;
+    page.drawImage(img, { x: M, y: 841.89 - M - hLogo, width: lLogo, height: hLogo });
+    const xT = M + lLogo + 16;
+    texte('CALCUL DE CONSOMMATION', xT, 841.89 - M - 18, 9.5, fB, bleu);
+    texte('Votre désinfectant Hygiène & Combat', xT, 841.89 - M - 40, 20, fB, encre);
+    texte((salle ? salle + ' · ' : '') + new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }), xT, 841.89 - M - 58, 10.5, fR, doux);
+
+    // Cadre bleu : la durée de la première commande
+    const yB = 841.89 - M - hLogo - 28 - 200;
+    page.drawRectangle({ x: M, y: yB, width: L, height: 200, color: bleu });
+    centre('VOTRE PREMIÈRE COMMANDE VOUS DURERA ENVIRON', W / 2, yB + 150, 11, fB, ciel);
+    centre(r.commande, W / 2, yB + 84, 54, fB, blanc);
+    centre(r.pour, W / 2, yB + 40, 11.5, fR, clair);
+
+    // Trois blocs
+    const g = 12, lb = (L - 2 * g) / 3, hb = 92, yb = yB - 18 - hb;
+    [['UN BIDON DURE', 'environ ' + r.bidon, ''], ['COÛT PAR MOIS', 'environ ' + nf(Math.round(r.mois), 0) + ' € HT', 'hors livraison'],
+      ['PAR NETTOYAGE', litres(r.solution) + ' de solution', 'soit ' + litres(r.produit) + ' de produit']].forEach(([titre, valeur, detail], i) => {
+      const x = M + i * (lb + g);
+      page.drawRectangle({ x, y: yb, width: lb, height: hb, color: pale, borderColor: rgb(211 / 255, 230 / 255, 242 / 255), borderWidth: 1 });
+      texte(titre, x + 14, yb + hb - 24, 8.5, fB, bleu);
+      let t = valeur, taille = 17;
+      while (fB.widthOfTextAtSize(t, taille) > lb - 28 && taille > 11) taille -= 0.5;
+      texte(t, x + 14, yb + hb - 52, taille, fB, encre);
+      if (detail) texte(detail, x + 14, yb + 16, 9.5, fR, doux);
+    });
+
+    // Pied de page
+    texte('Hygiène & Combat · contact@hygiene-combat.fr · hygiene-combat.fr', M, 36, 9, fR, doux);
+    return doc.save();
+  }
+
+  $('pdf').addEventListener('click', async () => {
+    const b = $('pdf');
+    b.disabled = true; b.textContent = 'Création…'; oublierPdf();
+    try {
+      const pdf = await creerPdf();
+      const nom = 'Consommation ' + (salle || 'Hygiène & Combat').replace(/[^\wÀ-ÿ -]/g, '').trim() + '.pdf';
+      urlPdf = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
+      statut('PDF prêt. ' + (CRM_CLIENT ? '<button class="bouton" id="garder">Enregistrer sur la fiche</button> ' : '') +
+        '<a class="bouton leger" href="' + urlPdf + '" download="' + nom.replace(/"/g, '') + '">↓ Télécharger</a> <a href="' + urlPdf + '" target="_blank" rel="noopener">Ouvrir le PDF ↗</a>');
+      if (CRM_CLIENT) $('garder').onclick = () => garder(pdf, nom);
+    } catch (e) { statut('Le PDF n’a pas pu être créé : ' + e.message, true); }
+    b.disabled = false; b.textContent = 'Créer le PDF client';
   });
-  $('imprimer').addEventListener('click', () => { $('hypotheses').open = true; window.print(); });
+
+  /** Range le PDF sur la fiche du client (même mécanisme que l'outil comparaison). */
+  async function garder(pdf, nom) {
+    const b = $('garder');
+    b.disabled = true; b.textContent = 'Enregistrement…';
+    try {
+      const jeton = (() => { try { return localStorage.getItem('crm_session') || ''; } catch (e) { return ''; } })();
+      if (!jeton) throw Error('Connectez-vous d’abord au CRM.');
+      let base64 = ''; for (let i = 0; i < pdf.length; i += 0x8000) base64 += String.fromCharCode.apply(null, pdf.subarray(i, i + 0x8000));
+      // « Produit » : résumé lu par le CRM (carte de la fiche et variable {{Durée commande}} des e-mails)
+      const resume = 'Consommation · première commande ' + r.commande + ' · 1 bidon ' + r.bidon + ' · ' + nf(r.surface, 0) + ' m², ' + r.jours + ' j/sem., ' + r.parJour + '/jour';
+      const j = await (await fetch(CRM_API, { method: 'POST', body: JSON.stringify({ fn: 'crmEnregistrerComparatif', args: [CRM_CLIENT, nom, btoa(base64), resume], jeton }) })).json();
+      if (!j.ok) throw Error(j.erreur === 'SESSION_EXPIREE' ? 'Session du CRM expirée : reconnectez-vous.' : j.erreur);
+      b.textContent = '✓ Enregistré sur la fiche' + (CRM_NOM ? ' de ' + CRM_NOM : '');
+      try { parent.postMessage({ type: 'crm-comparatif', comparatif: j.r }, location.origin); } catch (e) { /* hors CRM */ }
+    } catch (e) { b.disabled = false; b.textContent = 'Enregistrer sur la fiche'; statut('Non enregistré : ' + e.message, true); }
+  }
 
   majPuces();
   calculer();
 
-  // Dans le CRM (cadre) : la page donne sa hauteur pour que le cadre s'ajuste.
+  // Dans le CRM (cadre de la page Calculateur) : la page donne sa hauteur pour que le cadre s'ajuste.
   if (window.parent !== window && window.ResizeObserver) {
     new ResizeObserver(() => window.parent.postMessage({ type: 'calculateur-hauteur', hauteur: document.documentElement.scrollHeight }, '*'))
       .observe(document.body);
