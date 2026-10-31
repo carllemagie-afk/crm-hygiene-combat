@@ -664,7 +664,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-0319';
+const VERSION_APP = '2026.10.31-0335';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1690,11 +1690,30 @@ function enregistrerChamps(id, changes, element, rafraichir) {
   if (element) { element.classList.remove('enregistre'); void element.offsetWidth; element.classList.add('enregistre'); }
   const visible = rafraichir || Object.keys(changes).some(k => ['Owner', 'Prénom', 'Nom', 'Rôle', 'Ville', 'Devis', 'Montant devis', 'Tag', 'Téléphone', 'Téléphone 2', 'Email', 'Email 2'].includes(k));
   if (visible && S.page === 'fiche') pageFiche();
-  return appel('crmEnregistrerClient', id, changes).then(x => {
+  // Une fiche = un enregistrement à la fois : un clic fait pendant un envoi (ex. deux tags à la suite) part juste après,
+  // avec la dernière valeur. Le serveur reçoit donc les changements dans l'ordre, et l'écran n'est jamais ramené en arrière.
+  S.ecr = S.ecr || {};
+  const e = S.ecr[id] = S.ecr[id] || { vol: null, attente: null, avant: null };
+  e.attente = Object.assign(e.attente || {}, changes);
+  if (!e.avant) e.avant = avant;
+  return e.vol || envoyerFiche_(id);
+}
+
+/** Envoie les changements en attente d'une fiche ; relance s'il en est arrivé d'autres pendant l'envoi. */
+function envoyerFiche_(id) {
+  const e = S.ecr[id], changes = e.attente, avant = e.avant;
+  e.attente = null; e.avant = null;
+  e.vol = appel('crmEnregistrerClient', id, changes).then(x => {
+    if (e.attente) return x; // d'autres changements partent juste après : l'écran les montre déjà
     majClient(x);
     if (S.page === 'fiche' && S.id === id && (x.Tag === 'Won' && avant.Tag !== 'Won')) { pageFiche(); toast('Vente enregistrée : 1 commande ajoutée'); }
     return x;
-  }).catch(() => { Object.assign(c, avant); if (S.page === 'fiche') pageFiche(); });
+  }, () => {
+    if (e.attente) return; // la suite repart avec les valeurs les plus récentes
+    Object.keys(changes).forEach(k => { client(id)[k] = avant[k]; }); // échec : retour aux valeurs d'avant
+    if (S.page === 'fiche') pageFiche();
+  }).finally(() => { e.vol = null; if (e.attente) envoyerFiche_(id); });
+  return e.vol;
 }
 const enregistrerChamp = (id, champ, valeur, element, rafraichir) => enregistrerChamps(id, { [champ]: valeur }, element, rafraichir);
 
@@ -2048,7 +2067,7 @@ function optionsModeles(choisi) {
     S.d.modeles.filter(m => (m['Catégorie'] || 'Divers') === cat).map(m => '<option value="' + m.ID + '"' + (m.ID === choisi ? ' selected' : '') + '>' + esc(m.Nom) + '</option>').join('') + '</optgroup>').join('');
 }
 
-function fenetreEmail(c, apresEnvoi) {
+function fenetreEmail(c, apresEnvoi, brouillon) {
   if (!c.Email) return toast('Ajoutez d’abord une adresse e-mail sur la fiche', true);
   const owner = c.Owner || S.moi;
   const f = fenetre({ titre: 'Nouvel e-mail', large: true, corps:
@@ -2069,6 +2088,7 @@ function fenetreEmail(c, apresEnvoi) {
   };
   f.$('#emOwner').onchange = signature;
   signature();
+  if (brouillon) { f.$('#emObjet').value = brouillon.objet; f.$('#emCorps').value = brouillon.corps; f.$('#emOwner').value = brouillon.owner; signature(); }
   // {{Comparatif PDF}} dans le message : le dernier comparatif de la fiche part en pièce jointe
   const piece = () => {
     const joint = /\{\{\s*comparatif pdf\s*\}\}/i.test(f.$('#emCorps').value);
@@ -2081,9 +2101,16 @@ function fenetreEmail(c, apresEnvoi) {
   f.$('#emOk').onclick = () => {
     const objet = f.$('#emObjet').value.trim(), corps = f.$('#emCorps').value.trim();
     if (!objet || !corps) return toast('Indiquez un objet et un message', true);
-    occupe(f.$('#emOk'), appel('crmEnvoyerEmail', { clientId: c.ID, objet, corps, owner: f.$('#emOwner').value })).then(r => {
-      S.d.activites.push(r.activite); S.d.envoisAujourdhui++; f.fermer(); afficher(); toast('E-mail envoyé à ' + c.Email);
-      if (apresEnvoi) apresEnvoi();
+    // Envoi en arrière-plan : la fenêtre se ferme tout de suite ; en cas d'échec elle se rouvre avec le texte, pour réessayer.
+    const owner = f.$('#emOwner').value;
+    f.fermer();
+    toast('Envoi en cours à ' + c.Email + '…');
+    if (apresEnvoi) apresEnvoi();
+    rpc('crmEnvoyerEmail', [{ clientId: c.ID, objet, corps, owner }]).then(r => {
+      S.d.activites.push(r.activite); S.d.envoisAujourdhui++; afficher(); toast('E-mail envoyé à ' + c.Email);
+    }, e => {
+      toast('E-mail NON envoyé : ' + e.message, true);
+      fenetreEmail(c, null, { objet, corps, owner });
     });
   };
 }
