@@ -96,18 +96,21 @@
   @media (min-width: 960px) {
     .nav { display: flex; } .barre-mobile, .onglets-mobile { display: none; }
     main { padding: 30px 36px 48px; }
-    /* Barre de gauche : icônes seules (comme HubSpot) ; le nom apparaît au survol */
-    .nav { width: 68px; padding: 16px 10px; align-items: center; z-index: 40; }
-    .nav .marque { padding: 0 0 18px; justify-content: center; } .nav .marque > div { display: none; }
-    .nav button { width: 48px; justify-content: center; padding: 11px 0; }
-    .nav button .nom { display: none; }
-    .nav button.actif::before { left: -10px; }
-    .nav .nav-bas { width: 100%; justify-items: center; }
-    .nav .compteur { position: absolute; top: 2px; right: 0; margin: 0; font-size: 10px; line-height: 16px; min-width: 16px; padding: 0 4px; text-align: center; }
-    .nav .pied-nav { padding: 6px; background: none; justify-content: center; } .nav .pied-nav > div { display: none; }
-    .nav [data-nom] { position: relative; }
-    .nav [data-nom]:hover::after { content: attr(data-nom); position: absolute; left: calc(100% + 14px); top: 50%; transform: translateY(-50%); background: var(--ardoise-900);
+    /* Barre de gauche : icônes seules (comme HubSpot), nom au survol ; un clic sur le bouclier la remet en grand (body.nav-large) */
+    body:not(.nav-large) .nav { width: 68px; padding: 16px 10px; align-items: center; z-index: 40; }
+    body:not(.nav-large) .nav .marque { padding: 0 0 18px; justify-content: center; } body:not(.nav-large) .nav .marque > div { display: none; }
+    body:not(.nav-large) .nav button { width: 48px; justify-content: center; padding: 11px 0; }
+    body:not(.nav-large) .nav button .nom { display: none; }
+    body:not(.nav-large) .nav button.actif::before { left: -10px; }
+    body:not(.nav-large) .nav .nav-bas { width: 100%; justify-items: center; }
+    body:not(.nav-large) .nav .compteur { position: absolute; top: 2px; right: 0; margin: 0; font-size: 10px; line-height: 16px; min-width: 16px; padding: 0 4px; text-align: center; }
+    body:not(.nav-large) .nav .pied-nav { padding: 6px; background: none; justify-content: center; } body:not(.nav-large) .nav .pied-nav > div { display: none; }
+    body:not(.nav-large) .nav [data-nom] { position: relative; }
+    body:not(.nav-large) .nav [data-nom]:hover::after { content: attr(data-nom); position: absolute; left: calc(100% + 14px); top: 50%; transform: translateY(-50%); background: var(--ardoise-900);
       color: #fff; font-size: 13px; font-weight: 500; padding: 6px 10px; border-radius: 8px; white-space: nowrap; pointer-events: none; box-shadow: 0 6px 20px rgba(0,0,0,.18); z-index: 60; }
+
+    .nav .marque { cursor: pointer; border-radius: 10px; }
+    .nav .marque:hover svg { opacity: .8; }
   }
 
   /* ---------- Éléments ---------- */
@@ -661,7 +664,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-0311';
+const VERSION_APP = '2026.10.31-0319';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1263,7 +1266,7 @@ function menus() {
     (p.id === 'plus' && ['agenda', 'calculateur', 'stock', 'reglages'].includes(S.page))) ? 'actif' : '';
   const bouton = p => '<button data-aller="' + p.id + '" data-nom="' + esc(p.nom) + '" aria-label="' + esc(p.nom) + '" class="' + actif(p) + '">' + ico(p.ico) + '<span class="nom">' + p.nom + '</span>' +
     (nb[p.id] ? '<span class="compteur' + (p.id === 'emails' ? ' alerte' : '') + '">' + nb[p.id] + '</span>' : '') + '</button>';
-  $('#nav').innerHTML = '<div class="marque">' + BOUCLIER + '<div><b>HYGIÈNE &amp; COMBAT</b><span>CRM</span></div></div>' +
+  $('#nav').innerHTML = '<div class="marque" id="basculeNav" data-nom="' + (document.body.classList.contains('nav-large') ? 'Réduire le menu' : 'Agrandir le menu') + '">' + BOUCLIER + '<div><b>HYGIÈNE &amp; COMBAT</b><span>CRM</span></div></div>' +
     PAGES.filter(p => !PAGES_BAS.includes(p.id)).map(bouton).join('') +
     '<div class="nav-bas">' + PAGES_BAS.map(id => bouton(PAGES.find(p => p.id === id))).join('') + '</div>' +
     '<div class="pied-nav" data-aller="reglages" data-nom="' + esc(S.moi) + ' · Réglages">' + avatar(S.moi || '?', 's') + '<div><b style="font-size:13.5px">' + esc(S.moi) + '</b><small>' + esc(S.d.compte) + '</small></div></div>';
@@ -1271,6 +1274,8 @@ function menus() {
     (nb[p.id] ? '<span class="pastille-nb">' + nb[p.id] + '</span>' : '') + '</button>').join('');
   $('#barreMobile').innerHTML = BOUCLIER + '<b>HYGIÈNE &amp; COMBAT</b><span class="espace"></span>' + avatar(S.moi || '?', 's');
   $$('[data-aller]').forEach(b => b.onclick = () => b.dataset.aller === 'plus' ? menuPlus() : aller(b.dataset.aller));
+  // Bouclier : menu large (avec les noms) ou icônes seules ; choix gardé sur l'appareil
+  $('#basculeNav').onclick = () => { document.body.classList.toggle('nav-large'); garder('crm_nav_large', document.body.classList.contains('nav-large') ? '1' : ''); menus(); };
 }
 
 /** Téléphone : les pages qui ne tiennent pas dans la barre du bas. */
@@ -1293,7 +1298,8 @@ function aller(page, id) {
 }
 
 function afficher() {
-  document.body.classList.toggle('mode-fiche', S.page === 'fiche'); // grand écran : colonnes qui défilent séparément
+  document.body.classList.toggle('mode-fiche', S.page === 'fiche');
+  document.body.classList.toggle('nav-large', lire('crm_nav_large', '') === '1'); // grand écran : colonnes qui défilent séparément
   menus();
   const pages = { clients: pageClients, fiche: pageFiche, taches: pageTaches, agenda: pageAgenda, emails: pageEmails, sequence: pageSequence, reglages: pageReglages, import: pageImport,
     objectifs: pageObjectifs, stock: pageStock, calculateur: pageCalculateur };
