@@ -676,7 +676,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-1729';
+const VERSION_APP = '2026.10.31-1733';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -985,7 +985,15 @@ const avatar = (nom, taille) => '<span class="avatar ' + (taille || '') + '" tit
 const client = id => S.d.clients.find(c => c.ID === id);
 const nomClient = c => c ? (c.Salle || [c['Prénom'], c.Nom].filter(Boolean).join(' ') || c.Email || 'Sans nom') : '';
 const contactClient = c => [c['Prénom'], c.Nom].filter(Boolean).join(' ') + (c['Rôle'] ? ' (' + c['Rôle'] + ')' : '');
-const telNettoye = t => String(t || '').replace(/[^\d+]/g, '');
+/** Numéro pour composer : +33… (le Google Sheet retire le 0 du début d'un numéro pris pour un nombre : 781241191 → +33781241191). */
+const telNettoye = t => {
+  let n = String(t || '').replace(/[^\d+]/g, '');
+  if (/^0033\d{9}$/.test(n)) n = '+33' + n.slice(4);
+  if (/^[1-9]\d{8}$/.test(n)) n = '0' + n;
+  return /^0\d{9}$/.test(n) ? '+33' + n.slice(1) : n;
+};
+/** Numéro lisible : « 07 81 24 11 91 » (gardé tel quel s'il n'est pas français). */
+const telAffiche = t => { const n = telNettoye(t); return /^\+33\d{9}$/.test(n) ? ('0' + n.slice(3)).replace(/(\d{2})(?=\d)/g, '$1 ') : String(t || '').trim(); };
 function remplacer(liste, objet) { const i = liste.findIndex(x => x.ID === objet.ID); if (i >= 0) liste[i] = objet; else liste.push(objet); }
 /** Client renvoyé par le serveur, avec éventuellement la commande, la tâche et l'activité créées en même temps. */
 function majClient(c) {
@@ -1645,9 +1653,9 @@ function pageFiche() {
   // Téléphone / e-mail : le principal s'affiche, le second se déplie d'un clic (et peut devenir le principal).
   const double = (k1, k2, type, libelle) => {
     const v2 = c[k2] || '';
-    return '<div class="prop prop-double"><span>' + libelle + '</span><div class="double-ligne"><input type="' + type + '" data-champ="' + esc(k1) + '" value="' + esc(c[k1] || '') + '" placeholder="—">' +
+    return '<div class="prop prop-double"><span>' + libelle + '</span><div class="double-ligne"><input type="' + type + '" data-champ="' + esc(k1) + '" value="' + esc(type === 'tel' ? telAffiche(c[k1]) : c[k1] || '') + '" placeholder="—">' +
       '<button type="button" class="pastille-2' + (v2 ? ' rempli' : '') + '" data-deplier="' + esc(k2) + '" title="' + (v2 ? 'Voir le 2e' : 'Ajouter un 2e') + '">' + (v2 ? '2' : '+') + '</button></div>' +
-      '<div class="double-second" data-second="' + esc(k2) + '"' + (S.deplies && S.deplies[k2] ? '' : ' hidden') + '><input type="' + type + '" data-champ="' + esc(k2) + '" value="' + esc(v2) + '" placeholder="2e ' + libelle.toLowerCase() + '">' +
+      '<div class="double-second" data-second="' + esc(k2) + '"' + (S.deplies && S.deplies[k2] ? '' : ' hidden') + '><input type="' + type + '" data-champ="' + esc(k2) + '" value="' + esc(type === 'tel' ? telAffiche(v2) : v2) + '" placeholder="2e ' + libelle.toLowerCase() + '">' +
       (v2 ? '<button type="button" class="btn mini fantome" data-principal="' + esc(k1) + '|' + esc(k2) + '" title="Utiliser comme principal">' + ico('etoile') + 'Principal</button>' : '') + '</div></div>';
   };
   const section = (titre, contenu, ouvert) => '<details' + (ouvert ? ' open' : '') + '><summary>' + titre + ico('bas') + '</summary><div class="contenu">' + contenu + '</div></details>';
@@ -1701,7 +1709,7 @@ function pageFiche() {
   if (defil) ['col-gauche', 'col-centre', 'col-droite'].forEach((k, i) => { const z = $('#page .fiche > .' + k); if (z) z.scrollTop = defil[i]; });
   if (defil) $('#page .page').style.animation = 'none'; // pas d'animation d'entrée quand la même fiche se redessine
   $$('[data-onglet]').forEach(b => b.onclick = () => { S.ongletFiche = b.dataset.onglet; pageFiche(); });
-  $$('[data-champ]').forEach(i => i.onchange = () => enregistrerChamp(c.ID, i.dataset.champ, i.value, i));
+  $$('[data-champ]').forEach(i => i.onchange = () => enregistrerChamp(c.ID, i.dataset.champ, i.type === 'tel' ? telAffiche(i.value) : i.value, i)); // numéro gardé avec son 0
   $$('[data-tag]').forEach(b => b.onclick = () => {
     const tag = b.dataset.tag;
     if (tag === c.Tag) return;
@@ -2060,9 +2068,9 @@ const dureeTexte = s => s < 60 ? s + ' s' : Math.floor(s / 60) + ' min ' + Strin
 function fenetreAppel(c, tache) {
   const tel = telNettoye(c['Téléphone']), tel2 = telNettoye(c['Téléphone 2']);
   const f = fenetre({ titre: 'Appel · ' + esc(nomClient(c)), corps:
-    (tel ? '<a class="btn principal" data-composer href="tel:' + esc(tel) + '" style="width:100%;padding:12px;margin-bottom:' + (tel2 ? 8 : 16) + 'px">' + ico('tel') + 'Composer le ' + esc(c['Téléphone']) + '</a>'
+    (tel ? '<a class="btn principal" data-composer href="tel:' + esc(tel) + '" style="width:100%;padding:12px;margin-bottom:' + (tel2 ? 8 : 16) + 'px">' + ico('tel') + 'Composer le ' + esc(telAffiche(c['Téléphone'])) + '</a>'
       : '<p class="doux" style="margin-top:0">Pas de numéro sur la fiche.</p>') +
-    (tel2 ? '<a class="btn" data-composer href="tel:' + esc(tel2) + '" style="width:100%;margin-bottom:16px">' + ico('tel') + '2e numéro : ' + esc(c['Téléphone 2']) + '</a>' : '') +
+    (tel2 ? '<a class="btn" data-composer href="tel:' + esc(tel2) + '" style="width:100%;margin-bottom:16px">' + ico('tel') + '2e numéro : ' + esc(telAffiche(c['Téléphone 2'])) + '</a>' : '') +
     '<div class="piece-jointe" id="apDuree" hidden>' + ico('horloge') + '<span></span></div>' +
     '<div class="champ"><span class="doux petit" style="display:block;margin-bottom:6px">Résultat</span><div class="segment" id="apRes">' +
       ['Joint', 'Pas de réponse', 'Messagerie', 'Mauvais numéro'].map((r, i) => '<button data-r="' + r + '" class="' + (i === 0 ? 'actif' : '') + '">' + r + '</button>').join('') + '</div></div>' +
