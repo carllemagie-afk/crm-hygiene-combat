@@ -233,6 +233,7 @@
   .choix-tag button { border: 1px solid var(--trait); background: #fff; border-radius: 999px; padding: 4px 11px; font-size: 12.5px; font-weight: 500; color: var(--doux); cursor: pointer; transition: all var(--vite); }
   .choix-tag button:hover { border-color: var(--acier); }
   .choix-tag button.actif { border-color: transparent; }
+  .sous-tag { margin-top: 6px; align-items: center; }
   .owner-ligne { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
   .owner-ligne select { width: auto; flex: 1; padding: 6px 10px; }
   .actions-fiche { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 18px; }
@@ -604,7 +605,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.30-0422';
+const VERSION_APP = '2026.10.31-0121';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -901,7 +902,8 @@ function doublonsDe(c) {
 }
 const fermerRachats = (clientId, sauf) => S.d.taches.forEach(t => { if (t.ClientID === clientId && !t.Faite && t.ID !== sauf && /^Rachat ·/.test(t.Titre)) t.Faite = true; });
 const inscriptionActive = clientId => S.d.inscriptions.find(i => i.ClientID === clientId && i.Statut === 'En cours');
-const tagHtml = t => t ? '<span class="tag ' + esc(t) + '">' + esc(t) + '</span>' : '<span class="pale">—</span>';
+const tagHtml = (t, cat) => t ? '<span class="tag ' + esc(t) + '">' + esc(t) + (cat ? ' · ' + esc(cat) : '') + '</span>' : '<span class="pale">—</span>';
+const categoriesDe = tag => ((S.d && S.d.tagCategories) || {})[tag] || [];
 
 /** Même règle que le serveur : {{Champ}} remplacé, variable vide supprimée avec l'espace qui la précède. */
 function rendre(modele, vars) {
@@ -1345,12 +1347,12 @@ function listeClients() {
         '<input type="checkbox" class="case" data-coche="' + c.ID + '"' + (sel.has(c.ID) ? ' checked' : '') + '>' +
         '<div class="qui">' + avatar(nomClient(c)) + '<div><div class="nom">' + esc(nomClient(c)) + '</div><div class="sous">' +
           esc([contactClient(c), c.Ville].filter(Boolean).join(' · ') || c.Email || '') + '</div></div></div>' +
-        '<div class="col">' + tagHtml(c.Tag) + '</div>' +
+        '<div class="col">' + tagHtml(c.Tag, c['Catégorie']) + '</div>' +
         '<div class="col">' + (c.Owner ? '<span class="rangee" style="gap:7px;flex-wrap:nowrap">' + avatar(c.Owner, 's') + esc(c.Owner) + '</span>' : '—') + '</div>' +
         '<div class="col">' + esc(c.Devis && c.Devis !== 'Aucun' ? c.Devis : '—') + '</div>' +
         '<div class="col">' + esc(ilYa(c['Dernier appel'])) + '</div>' +
         '<div class="col">' + esc(c['Séquence'] ? (c['Séquence'] === 'En séquence' ? c['Séquence nom'] || 'En cours' : c['Séquence']) : '—') + '</div>' +
-        '<div class="mobile">' + tagHtml(c.Tag) + '</div></div>').join('');
+        '<div class="mobile">' + tagHtml(c.Tag, c['Catégorie']) + '</div></div>').join('');
   }
   z.querySelectorAll('[data-act="import"]').forEach(b => b.onclick = () => aller('import'));
   z.querySelectorAll('[data-act="nouveau"]').forEach(b => b.onclick = fenetreNouveauClient);
@@ -1480,6 +1482,8 @@ function pageFiche() {
           '<div class="doux" style="font-size:14px;padding-left:1px">' + esc([contactClient(c), c.Ville].filter(Boolean).join(' · ') || 'Contact à compléter') + '</div>' +
           '<div class="faits">' + faits + '</div>' +
           '<div class="choix-tag">' + d.tags.map(t => '<button data-tag="' + t + '" class="' + (c.Tag === t ? 'actif tag ' + t : '') + '">' + t + '</button>').join('') + '</div>' +
+          (categoriesDe(c.Tag).length ? '<div class="choix-tag sous-tag"><span class="pale petit">' + esc(c.Tag) + ' ·</span>' + categoriesDe(c.Tag).map(k =>
+            '<button data-categorie="' + esc(k) + '" class="' + (c['Catégorie'] === k ? 'actif tag ' + esc(c.Tag) : '') + '">' + esc(k) + '</button>').join('') + '</div>' : '') +
           '<div class="owner-ligne">' + avatar(c.Owner || '?', 's') + '<select data-champ="Owner" aria-label="Contact owner">' +
             ['', ...d.owners].map(o => '<option value="' + esc(o) + '"' + (c.Owner === o ? ' selected' : '') + '>' + esc(o ? 'Owner : ' + o : 'Sans owner') + '</option>').join('') + '</select></div>' +
           '<div class="actions-fiche">' +
@@ -1507,7 +1511,12 @@ function pageFiche() {
     const tag = b.dataset.tag;
     if (tag === c.Tag) return;
     if (tag === 'Lost' && commandesDe(c.ID).length) return fenetreChurn(c);
-    enregistrerChamp(c.ID, 'Tag', tag, null, true);
+    // La catégorie ne suit que si elle existe pour le nouveau tag.
+    enregistrerChamps(c.ID, { Tag: tag, 'Catégorie': categoriesDe(tag).includes(c['Catégorie']) ? c['Catégorie'] : '' }, null, true);
+  });
+  $$('[data-categorie]').forEach(b => b.onclick = () => {
+    const k = b.dataset.categorie;
+    enregistrerChamps(c.ID, { 'Catégorie': c['Catégorie'] === k ? '' : k }, null, true);
   });
   $$('[data-deplier]').forEach(b => b.onclick = () => {
     S.deplies = S.deplies || {};
@@ -1970,7 +1979,7 @@ function fenetreSequence(ids) {
       '<div class="segment defilant" id="sqQuand"><button data-q="maintenant" class="actif">Maintenant</button><button data-q="demain">Demain</button>' +
         '<button data-q="ouvre">1 jour ouvré</button><button data-q="date">Date précise</button></div>' +
       '<div class="rangee" id="sqDateLibre" hidden><input type="date" id="sqJour" style="width:auto"><input type="time" id="sqHeure" style="width:auto"></div>' +
-      '<label class="interrupteur petit"><input type="checkbox" id="sqOuvres" checked><i></i>Relances en jours ouvrés (samedi, dimanche → lundi)</label></div>' +
+      '<label class="interrupteur petit"><input type="checkbox" id="sqOuvres" checked><i></i>Délais en jours ouvrés (samedi et dimanche non comptés)</label></div>' +
     '<div class="frise-zone"><div class="frise" id="sqFrise"><div class="frise-jours"></div><div class="frise-marques"></div></div></div>' +
     '<div class="rangee" style="margin:0 0 10px"><span class="etiquette">Étapes</span><span class="pale petit">−1 / +1 décale d’un jour (les suivantes suivent) · cliquez une étape pour la modifier</span></div>' +
     (seul ? '' : '<p class="doux petit" style="margin:0 0 8px">Textes communs : les variables sont remplacées pour chaque client.</p>' + boutonsVariables()) +
@@ -1981,6 +1990,7 @@ function fenetreSequence(ids) {
   const L = 36; // largeur d'un jour dans la frise
   const estWE = d => d.getDay() === 0 || d.getDay() === 6;
   const plusJours = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const plusOuvres = (d, n) => { let x = new Date(d); while (n > 0) { x = plusJours(x, 1); if (!estWE(x)) n--; } return x; }; // samedi et dimanche non comptés
   const ecart = (a, b) => Math.round((debutJour(b) - debutJour(a)) / 864e5);
   const jourCourt = d => d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
   let s = null, etapes = [], ecartFixe = [], heures = []; // ecartFixe[i] : jours après l'étape précédente, choisis avec −1 / +1
@@ -2000,7 +2010,7 @@ function fenetreSequence(ids) {
       if (!actif[i]) return;
       if (!prec) { prec = res[i] = new Date(debut); return; }
       const fixe = ecartFixe[i] !== null;
-      let d = plusJours(prec, fixe ? ecartFixe[i] : Number(e.delai) || 0);
+      let d = fixe ? plusJours(prec, ecartFixe[i]) : eviterWE ? plusOuvres(prec, Number(e.delai) || 0) : plusJours(prec, Number(e.delai) || 0);
       const [h, m] = (heures[i] || heureDefaut()).split(':').map(Number);
       d.setHours(h, m, 0, 0);
       if (eviterWE && !fixe) while (estWE(d)) d = plusJours(d, 1);
