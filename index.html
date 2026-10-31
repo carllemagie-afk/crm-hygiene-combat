@@ -605,7 +605,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-0121';
+const VERSION_APP = '2026.10.31-0126';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -2336,7 +2336,7 @@ function fenetreRdv(c) {
     '<div class="grille-2"><label class="champ"><span>Date</span><input type="date" id="rdDate" value="' + dateLocale(d) + '"></label>' +
     '<label class="champ"><span>Heure</span><input type="time" id="rdHeure" value="10:00"></label>' +
     '<label class="champ"><span>Durée (min)</span><input type="number" id="rdDuree" value="' + esc(S.d.reglages.DUREE_RDV || 30) + '" min="5" step="5"></label>' +
-    '<label class="champ"><span>Avec</span><select id="rdOwner">' + S.d.owners.map(o => '<option' + (((c && c.Owner) || S.moi) === o ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select></label></div>' +
+    '<label class="champ"><span>Avec</span><select id="rdOwner">' + S.d.owners.map(o => '<option' + ((S.moi || (c && c.Owner)) === o ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select></label></div>' +
     '<label class="champ"><span>Lieu ou lien visio</span><input type="text" id="rdLieu" placeholder="À la salle, par téléphone, lien Meet…"></label>' +
     '<label class="champ"><span>Message de l’invitation</span><textarea id="rdNotes" style="min-height:70px"></textarea></label>' +
     '<label class="interrupteur"><input type="checkbox" id="rdInviter" checked><i></i><span id="rdAide"></span></label>',
@@ -2348,7 +2348,7 @@ function fenetreRdv(c) {
     const peut = !!(x && x.Email);
     f.$('#rdInviter').disabled = !peut;
     f.$('#rdInviter').checked = peut;
-    f.$('#rdAide').textContent = peut ? 'Envoyer l’invitation à ' + x.Email : 'Pas d’e-mail : ajouté seulement à votre agenda';
+    f.$('#rdAide').textContent = peut ? 'Envoyer la confirmation à ' + x.Email + ' (au nom de la personne choisie)' : 'Pas d’e-mail : ajouté seulement à votre agenda';
   };
   f.$('#rdTitre').oninput = () => { titreTouche = true; };
   f.$('#rdClient').onchange = maj;
@@ -2356,7 +2356,7 @@ function fenetreRdv(c) {
   f.$('#rdOk').onclick = () => { const invitation = f.$('#rdInviter').checked; occupe(f.$('#rdOk'), appel('crmRdv', { clientId: f.$('#rdClient').value, titre: f.$('#rdTitre').value.trim() || 'Rendez-vous Hygiène & Combat',
     debut: versIso(f.$('#rdDate').value, f.$('#rdHeure').value), duree: Number(f.$('#rdDuree').value) || 30, lieu: f.$('#rdLieu').value.trim(),
     notes: f.$('#rdNotes').value.trim(), inviter: f.$('#rdInviter').checked, owner: f.$('#rdOwner').value }))
-    .then(data => { S.d = data; f.fermer(); afficher(); toast(invitation ? 'Rendez-vous planifié, invitation envoyée' : 'Rendez-vous ajouté à l’agenda'); }); };
+    .then(data => { S.d = data; f.fermer(); afficher(); toast(invitation ? 'Rendez-vous planifié, confirmation envoyée' : 'Rendez-vous ajouté à l’agenda'); }); };
 }
 
 function pageAgenda() {

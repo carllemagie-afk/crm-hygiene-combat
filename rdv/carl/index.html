@@ -8,8 +8,24 @@
 <meta name="theme-color" content="#1d282e">
 <link rel="icon" href="https://carllemagie-afk.github.io/crm-hygiene-combat/favicon.svg">
 <link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<script>
+  // Les créneaux sont demandés dès maintenant, avant la police et le reste de la page (gagne le temps de chargement de la page).
+  // Clé client : celle du lien, sinon celle gardée par ce navigateur lors d'une visite précédente (client reconnu même sur le lien simple).
+  window.RDV_PRECHARGE = (function () {
+    try {
+      var q = new URLSearchParams(location.search);
+      var id = (q.get('p') || (location.pathname.split('/rdv/')[1] || '').split('/')[0] || '').toLowerCase();
+      if (!id || id === 'gerer') return null;
+      var cle = q.get('c') || '';
+      try { if (cle) localStorage.setItem('hc_rdv_c', cle); else cle = localStorage.getItem('hc_rdv_c') || ''; } catch (e) { /* navigation privée */ }
+      return { id: id, cle: cle, reponse: fetch('https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec', { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ fn: 'rdvPublicPage', args: [{ intervenant: id, client: cle }] }) }).then(function (r) { return r.json(); }) };
+    } catch (e) { return null; }
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <!--
   Page publique de prise de rendez-vous (GitHub Pages) : …/rdv/ (choix), …/rdv/carl/, …/rdv/matthieu/ (?c=clé : client reconnu,
   lien envoyé dans ses e-mails), …/rdv/gerer/#jeton (annuler / déplacer). Construite par build.py (https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec, https://carllemagie-afk.github.io/crm-hygiene-combat/).
@@ -86,6 +102,7 @@
   .chargement { display: flex; align-items: center; gap: 10px; color: var(--doux); padding: 8px 0; }
   .roue { width: 18px; height: 18px; border: 2px solid var(--clair); border-top-color: var(--acier-f); border-radius: 50%; animation: tour .7s linear infinite; }
   @keyframes tour { to { transform: rotate(360deg); } }
+  .tour-petit { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--trait); border-top-color: var(--doux); border-radius: 50%; animation: tour .8s linear infinite; vertical-align: -1px; margin-right: 4px; }
   .fantome { height: 46px; border-radius: 12px; background: linear-gradient(90deg, #eef2f4, #f7f9fa, #eef2f4); background-size: 200% 100%; animation: brille 1.2s ease infinite; }
   @keyframes brille { to { background-position: -200% 0; } }
   footer { text-align: center; color: var(--doux); font-size: 13px; padding: 10px 14px 30px; }
@@ -107,7 +124,9 @@
   const BASE = 'https://carllemagie-afk.github.io/crm-hygiene-combat/rdv/';
   const q = new URLSearchParams(location.search);
   const ID = (q.get('p') || (location.pathname.split('/rdv/')[1] || '').split('/')[0] || '').toLowerCase();
-  const CLE = q.get('c') || '';
+  const PRE = window.RDV_PRECHARGE;
+  const CLE = q.get('c') || (PRE && PRE.cle) || '';
+  const memoire = { lire: k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }, ecrire: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* rien */ } } };
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const JOURS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
@@ -188,18 +207,19 @@
   }
 
   // ------------------------------------------------------------------ Réservation : …/rdv/carl/(?c=clé)
-  function pageReserver(data, avertissement) {
+  function pageReserver(data, avertissement, cleGardee) {
     const p = data.profil, c = data.client;
     const telConnu = c && c.telephone;
     $('#app').innerHTML = carteProfil(p,
       (c ? '<div class="bonjour">Bonjour ' + esc(c.prenom || c.nom || '') + ' 👋 Choisissez votre créneau : ' + esc(p.prenom) + ' vous appellera' + (telConnu ? ' au <b>' + esc(c.telephone) + '</b>' : '') + '.</div>' : '') +
-      (data.cleInvalide ? '<div class="message info">Ce lien n’est plus valable : indiquez vos coordonnées après avoir choisi votre créneau.</div>' : '')) +
+      (data.cleInvalide && q.get('c') ? '<div class="message info">Ce lien n’est plus valable : indiquez vos coordonnées après avoir choisi votre créneau.</div>' : '')) +
       '<div class="carte">' + (avertissement ? '<div class="message erreur" style="margin:0 0 12px">' + esc(avertissement) + '</div>' : '') + '<div id="sel"></div><div id="msg"></div></div>';
     let choix = null, jourChoisi = '';
-    const cleResa = aleatoire();
-    const formulaire = !c ? '<div class="champs"><div class="deux"><input id="f_prenom" placeholder="Prénom" autocomplete="given-name"><input id="f_nom" placeholder="Nom" autocomplete="family-name"></div>' +
-        '<input id="f_salle" placeholder="Nom de votre salle" autocomplete="organization"><input id="f_email" type="email" placeholder="E-mail" autocomplete="email">' +
-        '<input id="f_tel" type="tel" placeholder="Téléphone (pour l’appel)" autocomplete="tel"><input id="f_site" class="piege" tabindex="-1" autocomplete="off" aria-hidden="true"></div>'
+    const cleResa = cleGardee || aleatoire();
+    // Lien sans clé : l'e-mail suffit (la fiche du CRM donne le reste) ; le numéro n'est utile que si nous ne l'avons pas.
+    const formulaire = !c ? '<div class="champs"><input id="f_email" type="email" placeholder="Votre e-mail" autocomplete="email" value="' + esc(memoire.lire('hc_rdv_email')) + '">' +
+        '<input id="f_tel" type="tel" placeholder="Téléphone (si nous ne l’avons pas déjà)" autocomplete="tel" value="' + esc(memoire.lire('hc_rdv_tel')) + '">' +
+        '<input id="f_site" class="piege" tabindex="-1" autocomplete="off" aria-hidden="true"></div>'
       : !telConnu ? '<div class="champs"><input id="f_tel" type="tel" placeholder="Votre numéro de téléphone" autocomplete="tel"></div>' : '';
     const val = id => ($('#' + id) ? $('#' + id).value.trim() : '');
     selecteur($('#sel'), data.jours, (t, jour) => {
@@ -213,30 +233,32 @@
       if (!choix) return;
       const b = $('#ok');
       const donnees = { intervenant: p.id, debut: new Date(choix).toISOString(), cle: cleResa, client: c ? CLE : '', telephone: val('f_tel'),
-        prenom: val('f_prenom'), nom: val('f_nom'), entreprise: val('f_salle'), email: val('f_email'), site: val('f_site') };
-      if (!c && (!donnees.prenom || !donnees.nom || !donnees.entreprise || !donnees.email || !donnees.telephone)) return erreur($('#msgBarre'), 'Merci de remplir tous les champs.');
+        email: val('f_email'), site: val('f_site') };
+      if (!c && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(donnees.email)) return erreur($('#msgBarre'), 'Indiquez votre adresse e-mail.');
       if (c && !telConnu && !donnees.telephone) return erreur($('#msgBarre'), 'Indiquez le numéro auquel vous appeler.');
-      b.disabled = true; b.textContent = 'Confirmation…';
+      if (!c) { memoire.ecrire('hc_rdv_email', donnees.email); if (donnees.telephone) memoire.ecrire('hc_rdv_tel', donnees.telephone); }
+      // Confirmation affichée tout de suite ; l'enregistrement se termine en arrière-plan (la page revient au choix en cas de souci).
+      barre('');
+      const fin = new Date(choix + p.duree * 60000);
+      pageFaite({ libelle: libelleJour(jourChoisi) + ' à ' + hm(choix), heureFin: hm(fin.getTime()), telephone: telConnu ? c.telephone : donnees.telephone,
+        intervenant: p }, p, null, true);
       api('rdvPublicReserver', donnees).then(r => {
-        barre('');
         pageFaite(r, p);
         const jeton = String(r.gestion || '').split('#')[1];
         if (jeton) api('rdvPublicEnvoyerMail', jeton).catch(() => {}); // e-mail envoyé en arrière-plan
       }, err => {
-        b.disabled = false; b.textContent = 'Confirmer le rendez-vous';
         if (/vient d’être pris|plus disponible/.test(err.message)) {
-          barre('');
-          return api('rdvPublicPage', { intervenant: p.id, client: c ? CLE : '' }).then(x => pageReserver(x, err.message), () => erreur($('#msg'), esc(err.message)));
+          return api('rdvPublicPage', { intervenant: p.id, client: c ? CLE : '' }).then(x => pageReserver(x, err.message), () => pageReserver(data, err.message));
         }
-        erreur($('#msgBarre'), esc(err.message) + (err.reseau ? '<br>Vous pouvez réessayer : aucun doublon ne sera créé.' : ''));
+        pageReserver(data, err.message + (err.reseau ? ' Vous pouvez réessayer : aucun doublon ne sera créé.' : ''), cleResa);
       });
     }
   }
 
-  function pageFaite(r, p, titre) {
+  function pageFaite(r, p, titre, enCours) {
     window.scrollTo({ top: 0 });
-    $('#app').innerHTML = '<div class="carte fait"><div class="rond">✓</div><h1>' + (titre || 'C’est confirmé !') + '</h1>' +
-      '<p class="doux" style="margin:4px 0 0">Un e-mail récapitulatif arrive dans votre boîte.</p>' +
+    $('#app').innerHTML = '<div class="carte fait"><div class="rond">✓</div><h1>' + (titre || 'C’est noté !') + '</h1>' +
+      '<p class="doux" style="margin:4px 0 0">' + (enCours ? '<span class="tour-petit"></span> Enregistrement…' : 'Rendez-vous enregistré. Un e-mail récapitulatif arrive dans votre boîte.') + '</p>' +
       '<dl class="details"><dt>Quand</dt><dd>' + esc(majuscule(r.libelle)) + ' – ' + esc(r.heureFin) + '</dd><dt>Avec</dt><dd>' + esc((r.intervenant && r.intervenant.nom) || (p && p.nom) || '') + '</dd>' +
       '<dt>Comment</dt><dd>📞 Appel' + (r.telephone ? ' au ' + esc(r.telephone) : '') + '</dd></dl>' +
       (r.gestion ? '<div class="actions"><a class="btn second" href="' + esc(r.gestion) + '">Annuler ou déplacer</a></div>' : '') + '</div>';
@@ -299,8 +321,11 @@
   // ------------------------------------------------------------------ Démarrage
   if (ID === 'gerer') pageGerer(decodeURIComponent(location.hash.slice(1)));
   else if (!ID) pageChoix();
-  else api('rdvPublicPage', { intervenant: ID, client: CLE }).then(data => {
+  else (PRE && PRE.id === ID && PRE.cle === CLE
+    ? PRE.reponse.then(x => { if (!x.ok) throw new Error(x.erreur || 'Erreur inconnue'); return x.r; }, () => api('rdvPublicPage', { intervenant: ID, client: CLE }))
+    : api('rdvPublicPage', { intervenant: ID, client: CLE })).then(data => {
     document.title = 'Rendez-vous avec ' + data.profil.prenom + ' – Hygiène & Combat';
+    if (data.cleInvalide && !q.get('c')) memoire.ecrire('hc_rdv_c', ''); // clé gardée par le navigateur, plus valable
     pageReserver(data);
   }, e => {
     $('#app').innerHTML = '<div class="carte"><h1>Page indisponible</h1><div class="message erreur">' + esc(e.message) + '</div>' +
