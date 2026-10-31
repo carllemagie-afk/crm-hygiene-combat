@@ -12,7 +12,7 @@
   Paramètres d'adresse (tous facultatifs) :
     ?client=1              vue client : les hypothèses de dosage et de prix ne sont plus modifiables
     ?prix=non              masque les prix
-    ?tatamis=150&ring=36&parjour=2&jours=6&semaines=47   pré-remplit le formulaire (ex. depuis une fiche client)
+    ?tatamis=150&parjour=2&jours=6   pré-remplit le formulaire (ex. depuis une fiche client)
     ?salle=Boxing%20Club   affiche le nom de la salle dans le titre et le résumé
 -->
 <style>
@@ -102,15 +102,6 @@
         <small>Tous les tapis au sol, y compris l'espace de grappling.</small>
       </label>
 
-      <label class="champ"><span>Ring, cage et autres surfaces</span>
-        <div class="saisie"><button type="button" data-pas="-6" aria-label="Moins 6 m²">−</button><input id="ring" type="number" inputmode="decimal" min="0" step="1" value="0"><em>m²</em><button type="button" data-pas="6" aria-label="Plus 6 m²">+</button></div>
-        <div class="puces" data-cible="ring">
-          <button type="button" data-ajout="36">+ Ring 6 × 6 m</button>
-          <button type="button" data-ajout="50">+ Cage MMA</button>
-          <button type="button" data-ajout="0" data-zero>Aucun</button>
-        </div>
-      </label>
-
       <label class="champ"><span>Nettoyages par jour d'ouverture</span>
         <div class="saisie"><button type="button" data-pas="-1" aria-label="Moins un nettoyage">−</button><input id="parjour" type="number" inputmode="decimal" min="0" step="1" value="1"><em>fois</em><button type="button" data-pas="1" aria-label="Plus un nettoyage">+</button></div>
         <div class="puces" data-cible="parjour">
@@ -122,11 +113,6 @@
 
       <label class="champ"><span>Jours d'ouverture par semaine</span>
         <div class="saisie"><button type="button" data-pas="-1" aria-label="Moins un jour">−</button><input id="jours" type="number" inputmode="decimal" min="0" max="7" step="1" value="6"><em>jours</em><button type="button" data-pas="1" aria-label="Plus un jour">+</button></div>
-      </label>
-
-      <label class="champ"><span>Semaines d'ouverture par an</span>
-        <div class="saisie"><button type="button" data-pas="-1" aria-label="Moins une semaine">−</button><input id="semaines" type="number" inputmode="decimal" min="1" max="52" step="1" value="47"><em>semaines</em><button type="button" data-pas="1" aria-label="Plus une semaine">+</button></div>
-        <small>52 moins les fermetures (vacances d'été, fêtes). 47 = environ 5 semaines de fermeture.</small>
       </label>
 
       <details id="hypotheses">
@@ -181,7 +167,7 @@
   const params = new URLSearchParams(location.search);
   const vueClient = params.get('client') === '1';
   const avecPrix = params.get('prix') !== 'non';
-  const CHAMPS = ['tatamis', 'ring', 'parjour', 'jours', 'semaines', 'lpar100', 'dilution', 'bidon', 'parcarton', 'prixbidon'];
+  const CHAMPS = ['tatamis', 'parjour', 'jours', 'lpar100', 'dilution', 'bidon', 'parcarton', 'prixbidon'];
 
   // Pré-remplissage depuis l'adresse (ex. lien depuis une fiche client du CRM)
   CHAMPS.forEach(c => { if (params.has(c) && params.get(c) !== '' && !isNaN(Number(params.get(c)))) $(c).value = params.get(c); });
@@ -209,8 +195,8 @@
   }
 
   function calculer() {
-    const surface = num('tatamis') + num('ring');
-    const parJour = num('parjour'), jours = Math.min(7, num('jours')), semaines = Math.min(52, Math.max(1, num('semaines')));
+    const surface = num('tatamis');
+    const parJour = num('parjour'), jours = Math.min(7, num('jours')), semaines = 52; // ouvert toutes les semaines, toute l'année
     const solutionM2 = num('lpar100') / 100, dilution = num('dilution') / 100;
     const bidon = num('bidon') || 5, parCarton = Math.max(1, Math.round(num('parcarton')) || 4), prix = num('prixbidon');
     const carton = bidon * parCarton;
@@ -271,7 +257,7 @@
     resume = [
       'Consommation estimée' + (salle ? ' · ' + salle : '') + ' (désinfectant Hygiène & Combat)',
       '',
-      'Surface : ' + nf(surface, 0) + ' m² · ' + pluriel(parJour, 'nettoyage') + ' par jour · ' + jours + ' j/semaine · ' + semaines + ' semaines/an',
+      'Surface : ' + nf(surface, 0) + ' m² · ' + pluriel(parJour, 'nettoyage') + ' par jour · ' + jours + ' j/semaine, toute l\'année',
       'Par nettoyage : ' + litres(solutionParNettoyage) + ' de solution (' + litres(produitParNettoyage) + ' de produit + eau)',
       'Un bidon de ' + nf(bidon, 0) + ' L dure ' + duree(semainesParBidon, semaines) + ', un carton de ' + parCarton + ' bidons ' + duree(semainesParCarton, semaines),
       'Consommation : ' + litres(produitMois) + ' de produit par mois en moyenne, ' + litres(produitAn) + ' par an (' + nf(bidonsAn, 1) + ' bidons)',
