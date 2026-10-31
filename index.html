@@ -676,7 +676,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-1733';
+const VERSION_APP = '2026.10.31-1738';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -2241,7 +2241,7 @@ function sequenceConseillee(c) {
 }
 
 /**
- * Inscription façon HubSpot : départ (maintenant, demain, 1 jour ouvré, date au choix), frise des étapes,
+ * Inscription façon HubSpot : départ (maintenant, demain, date au choix), frise des étapes,
  * chaque étape décalable de −1 / +1 jour (les suivantes suivent) et modifiable avant le lancement.
  */
 function fenetreSequence(ids) {
@@ -2255,9 +2255,9 @@ function fenetreSequence(ids) {
     '<p class="doux petit" id="sqDesc" style="margin:-4px 0 14px"></p>' +
     '<div class="plan-depart"><span class="etiquette">Premier envoi</span>' +
       '<div class="segment defilant" id="sqQuand"><button data-q="maintenant" class="actif">Maintenant</button><button data-q="demain">Demain</button>' +
-        '<button data-q="ouvre">1 jour ouvré</button><button data-q="date">Date précise</button></div>' +
+        '<button data-q="date">Date précise</button></div>' +
       '<div class="rangee" id="sqDateLibre" hidden><input type="date" id="sqJour" style="width:auto"><input type="time" id="sqHeure" style="width:auto"></div>' +
-      '<label class="interrupteur petit"><input type="checkbox" id="sqOuvres" checked><i></i>Délais en jours ouvrés (samedi et dimanche non comptés)</label></div>' +
+      '</div>' +
     '<div class="frise-zone"><div class="frise" id="sqFrise"><div class="frise-jours"></div><div class="frise-marques"></div></div></div>' +
     '<div class="rangee" style="margin:0 0 10px"><span class="etiquette">Étapes</span><span class="pale petit">−1 / +1 décale d’un jour (les suivantes suivent) · cliquez une étape pour la modifier</span></div>' +
     (seul ? '' : '<p class="doux petit" style="margin:0 0 8px">Textes communs : les variables sont remplacées pour chaque client.</p>' + boutonsVariables()) +
@@ -2274,7 +2274,7 @@ function fenetreSequence(ids) {
   let s = null, etapes = [], ecartFixe = [], heures = []; // ecartFixe[i] : jours après l'étape précédente, choisis avec −1 / +1
   let actif = [], avantRetrait = null; // étapes retirées pour cette inscription, et l'état d'avant pour « Rétablir »
   const vivantes = () => etapes.map((_, i) => i).filter(i => actif[i]);
-  let depart = 'maintenant', debut = new Date(), eviterWE = true;
+  let depart = 'maintenant', debut = new Date(), eviterWE = false; // pas de jours ouvrés : on travaille aussi le week-end
 
   const heureDefaut = () => {
     const h = debut.getHours();
@@ -2441,7 +2441,6 @@ function fenetreSequence(ids) {
   }
 
   f.el.querySelectorAll('#sqQuand button').forEach(b => b.onclick = () => choisirDepart(b.dataset.q));
-  f.$('#sqOuvres').onchange = e => { eviterWE = e.target.checked; majDates(1); };
   const dateLibre = () => {
     const [a, mo, j] = f.$('#sqJour').value.split('-').map(Number);
     const [h, mi] = (f.$('#sqHeure').value || p2(hDebut) + ':00').split(':').map(Number);
