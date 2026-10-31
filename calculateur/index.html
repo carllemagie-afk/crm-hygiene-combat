@@ -37,10 +37,16 @@
   .puces { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
   .puces button { border: 1px solid var(--ciel); background: #fff; color: var(--bleu); border-radius: 20px; padding: 3px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
   .puces button[aria-pressed="true"] { background: var(--bleu); border-color: var(--bleu); color: #fff; }
-  .reco { background: var(--bleu); color: #fff; border-radius: 14px; padding: 22px 24px; }
+  .reco { background: var(--bleu); color: #fff; border-radius: 12px; padding: 14px 18px; }
   .reco .surtitre { color: var(--ciel); }
-  .reco .grand { font-size: 44px; font-weight: 700; line-height: 1.1; margin: 6px 0 8px; letter-spacing: -.5px; }
-  .reco p { margin: 0; color: #dcecf6; font-size: 14px; }
+  .reco .grand { font-size: 30px; font-weight: 700; line-height: 1.15; margin: 2px 0 4px; letter-spacing: -.3px; }
+  .reco p { margin: 0; color: #dcecf6; font-size: 13.5px; }
+  .tableau { margin-top: 10px; border: 1px solid var(--trait); border-radius: 12px; padding: 4px 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--trait); }
+  tr:last-child td { border-bottom: 0; }
+  th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--bleu); font-weight: 600; }
+  td.n, th.n { text-align: right; white-space: nowrap; }
   .cartes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
   .carte { border: 1px solid var(--trait); border-radius: 12px; padding: 12px 14px; background: var(--pale); }
   .carte .titre { font-size: 11.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--bleu); font-weight: 600; }
@@ -55,7 +61,7 @@
   @media (max-width: 760px) {
     .grille { grid-template-columns: minmax(0, 1fr); }
     .cartes { grid-template-columns: minmax(0, 1fr); }
-    .reco .grand { font-size: 36px; }
+    .reco .grand { font-size: 26px; }
   }
 </style>
 </head>
@@ -97,6 +103,12 @@
         <div class="carte"><div class="titre">Un bidon dure</div><div class="valeur" id="r-bidon">—</div></div>
         <div class="carte"><div class="titre">Coût par mois</div><div class="valeur" id="r-mois">—</div><div class="detail">hors livraison</div></div>
         <div class="carte"><div class="titre">Par nettoyage</div><div class="valeur" id="r-dose">—</div><div class="detail" id="r-dose-d"></div></div>
+      </div>
+      <div class="tableau">
+        <table>
+          <thead><tr><th>Consommation</th><th class="n">Produit pur</th><th class="n">Bidons</th><th class="n">Coût HT</th></tr></thead>
+          <tbody id="r-tableau"></tbody>
+        </table>
       </div>
       <div class="actions">
         <button class="bouton" type="button" id="pdf">Créer le PDF client</button>
@@ -147,6 +159,10 @@
       bidon: parSemaine ? duree(BIDON / parSemaine) : '—',
       mois: parSemaine * 52 / 12 * PRIX_BIDON / BIDON,
     };
+    // Détail : par nettoyage, semaine, mois (moyenne) et année
+    r.lignes = [['Par nettoyage', produit], ['Par semaine', parSemaine], ['Par mois', parSemaine * 52 / 12], ['Par an', parSemaine * 52]]
+      .map(([nom, l]) => [nom, l ? litres(l) : '—', l ? nf(l / BIDON, l / BIDON < 1 ? 2 : 1) : '—', l ? nf(l * PRIX_BIDON / BIDON, l * PRIX_BIDON / BIDON < 10 ? 2 : 0) + ' €' : '—']);
+    $('r-tableau').innerHTML = r.lignes.map(([nom, a, b, c]) => '<tr><td>' + nom + '</td><td class="n">' + a + '</td><td class="n">' + b + '</td><td class="n">' + c + '</td></tr>').join('');
     r.pour = 'Pour ' + nf(surface, 0) + ' m² de tatamis, ' + pluriel(jours, 'jour') + ' par semaine, ' + pluriel(parJour, 'nettoyage') + ' par jour.';
     $('r-commande').textContent = parSemaine ? '≈ ' + r.commande : 'Indiquez votre salle';
     $('r-pour').textContent = parSemaine ? r.pour : 'Le calcul se met à jour au fur et à mesure.';
@@ -202,23 +218,37 @@
     texte((salle ? salle + ' · ' : '') + new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }), xT, 841.89 - M - 58, 10.5, fR, doux);
 
     // Cadre bleu : la durée de la première commande
-    const yB = 841.89 - M - hLogo - 28 - 200;
-    page.drawRectangle({ x: M, y: yB, width: L, height: 200, color: bleu });
-    centre('VOTRE PREMIÈRE COMMANDE VOUS DURERA ENVIRON', W / 2, yB + 150, 11, fB, ciel);
-    centre(r.commande, W / 2, yB + 84, 54, fB, blanc);
-    centre(r.pour, W / 2, yB + 40, 11.5, fR, clair);
+    const yB = 841.89 - M - hLogo - 24 - 110;
+    page.drawRectangle({ x: M, y: yB, width: L, height: 110, color: bleu });
+    centre('VOTRE PREMIÈRE COMMANDE VOUS DURERA ENVIRON', W / 2, yB + 82, 10, fB, ciel);
+    centre(r.commande, W / 2, yB + 44, 30, fB, blanc);
+    centre(r.pour, W / 2, yB + 18, 10.5, fR, clair);
 
     // Trois blocs
-    const g = 12, lb = (L - 2 * g) / 3, hb = 92, yb = yB - 18 - hb;
+    const g = 12, lb = (L - 2 * g) / 3, hb = 76, yb = yB - 14 - hb;
     [['UN BIDON DURE', 'environ ' + r.bidon, ''], ['COÛT PAR MOIS', 'environ ' + nf(Math.round(r.mois), 0) + ' € HT', 'hors livraison'],
       ['PAR NETTOYAGE', litres(r.solution) + ' de solution', 'soit ' + litres(r.produit) + ' de produit']].forEach(([titre, valeur, detail], i) => {
       const x = M + i * (lb + g);
       page.drawRectangle({ x, y: yb, width: lb, height: hb, color: pale, borderColor: rgb(211 / 255, 230 / 255, 242 / 255), borderWidth: 1 });
-      texte(titre, x + 14, yb + hb - 24, 8.5, fB, bleu);
-      let t = valeur, taille = 17;
-      while (fB.widthOfTextAtSize(t, taille) > lb - 28 && taille > 11) taille -= 0.5;
-      texte(t, x + 14, yb + hb - 52, taille, fB, encre);
-      if (detail) texte(detail, x + 14, yb + 16, 9.5, fR, doux);
+      texte(titre, x + 14, yb + hb - 22, 8.5, fB, bleu);
+      let t = valeur, taille = 15;
+      while (fB.widthOfTextAtSize(t, taille) > lb - 28 && taille > 10) taille -= 0.5;
+      texte(t, x + 14, yb + hb - 46, taille, fB, encre);
+      if (detail) texte(detail, x + 14, yb + 12, 9, fR, doux);
+    });
+
+    // Tableau : consommation et coût par nettoyage, semaine, mois, année
+    const cols = [M + 14, M + L - 250, M + L - 130, M + L - 14]; // libellé à gauche, chiffres alignés à droite
+    let y = yb - 34;
+    const ligne = (vals, police, couleur, taille) => {
+      texte(vals[0], cols[0], y, taille, police, couleur);
+      vals.slice(1).forEach((v, i) => texte(v, cols[i + 1] - police.widthOfTextAtSize(v, taille), y, taille, police, couleur));
+    };
+    ligne(['CONSOMMATION', 'PRODUIT PUR', 'BIDONS', 'COÛT HT'], fB, bleu, 8.5);
+    r.lignes.forEach(v => {
+      page.drawLine({ start: { x: M, y: y - 9 }, end: { x: M + L, y: y - 9 }, thickness: 0.7, color: rgb(211 / 255, 230 / 255, 242 / 255) });
+      y -= 26;
+      ligne(v, v[0] === 'Par an' ? fB : fR, encre, 11);
     });
 
     // Pied de page
