@@ -138,6 +138,7 @@
   .tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   .tag.New { background: #e8f0f6; color: #3f6f8f; } .tag.Unqualified { background: #eef0f1; color: #66737a; }
   .tag.Qualifying { background: #fbf3e4; color: #9a6a1c; } .tag.Qualified { background: #ecebf8; color: #5a51a8; } .tag.Won { background: var(--ok-50); color: var(--ok); } .tag.Lost { background: #f1eeee; color: #8a5a57; }
+  .tag.Exclusion { background: #f3eef3; color: #7a5a7c; }
   .puce { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; background: var(--acier-50); color: var(--doux); border: 1px solid var(--trait); white-space: nowrap; }
   .puce svg.i { width: 14px; height: 14px; }
   .puce.vert { background: var(--ok-50); color: var(--ok); border-color: transparent; }
@@ -234,6 +235,9 @@
   .choix-tag button:hover { border-color: var(--acier); }
   .choix-tag button.actif { border-color: transparent; }
   .sous-tag { margin-top: 6px; align-items: center; }
+  .sous-tag button { padding: 2px 9px; font-size: 11.5px; border-style: dashed; }
+  .sous-tag button.actif { border-style: solid; }
+  .sous-tag button.plus-sous { border-color: transparent; background: none; color: var(--acier); font-weight: 600; padding: 2px 6px; }
   .owner-ligne { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
   .owner-ligne select { width: auto; flex: 1; padding: 6px 10px; }
   .actions-fiche { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 18px; }
@@ -605,7 +609,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-0126';
+const VERSION_APP = '2026.10.31-0203';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -670,7 +674,7 @@ const VUES_BASE = [
   { ID: 'qualifying', Nom: 'Qualifying', f: { tags: ['Qualifying'] } },
   { ID: 'qualified', Nom: 'Qualified', f: { tags: ['Qualified'] } },
   { ID: 'devis', Nom: 'Devis en cours', f: { devis: ['À faire', 'Envoyé'] } },
-  { ID: 'relance', Nom: 'À rappeler (14 j+)', f: { pasAppeleDepuis: 14, exclureTags: ['Won', 'Lost'] } },
+  { ID: 'relance', Nom: 'À rappeler (14 j+)', f: { pasAppeleDepuis: 14, exclureTags: ['Won', 'Lost', 'Exclusion'] } },
   { ID: 'sequence', Nom: 'En séquence', f: { sequence: ['En séquence'] } },
   { ID: 'repondu', Nom: 'Ont répondu', f: { sequence: ['Répondu'] } },
   { ID: 'clic', Nom: 'Ont cliqué (7 j)', f: { clicDepuis: 7 } },
@@ -902,8 +906,30 @@ function doublonsDe(c) {
 }
 const fermerRachats = (clientId, sauf) => S.d.taches.forEach(t => { if (t.ClientID === clientId && !t.Faite && t.ID !== sauf && /^Rachat ·/.test(t.Titre)) t.Faite = true; });
 const inscriptionActive = clientId => S.d.inscriptions.find(i => i.ClientID === clientId && i.Statut === 'En cours');
-const tagHtml = (t, cat) => t ? '<span class="tag ' + esc(t) + '">' + esc(t) + (cat ? ' · ' + esc(cat) : '') + '</span>' : '<span class="pale">—</span>';
+/** Tag + sous-catégories (« Lost · Better pricing +1 » ; toutes dans l'infobulle). */
+const tagHtml = (t, cat) => {
+  if (!t) return '<span class="pale">—</span>';
+  const k = listeCategories(cat);
+  return '<span class="tag ' + esc(t) + '"' + (k.length > 1 ? ' title="' + esc(t + ' · ' + k.join(', ')) + '"' : '') + '>' + esc(t) + (k.length ? ' · ' + esc(k[0]) + (k.length > 1 ? ' +' + (k.length - 1) : '') : '') + '</span>';
+};
 const categoriesDe = tag => ((S.d && S.d.tagCategories) || {})[tag] || [];
+/** Sous-catégories cumulables, gardées dans la colonne Catégorie sous la forme « A, B ». */
+const listeCategories = v => String(v || '').split(',').map(x => x.trim()).filter(Boolean);
+/** Sous-catégories gardées quand le tag change : seulement celles qui existent pour le nouveau tag. */
+const categoriesPour = (tag, v) => listeCategories(v).filter(k => categoriesDe(tag).includes(k)).join(', ');
+/**
+ * Ligne de sous-catégories (petites pastilles, plusieurs possibles) ; `attr` = attribut data- des boutons.
+ * Repliée : seulement celles choisies + « + préciser » (data-sous-ouvrir) qui déplie toute la liste.
+ */
+const sousTagsHtml = (tag, v, attr, replie) => {
+  const toutes = categoriesDe(tag), choisies = listeCategories(v);
+  if (!toutes.length) return '';
+  const montrees = replie ? toutes.filter(k => choisies.includes(k)) : toutes;
+  return '<div class="choix-tag sous-tag"><span class="pale petit">' + esc(tag) + ' ·</span>' +
+    montrees.map(k => '<button type="button" ' + attr + '="' + esc(k) + '" class="' + (choisies.includes(k) ? 'actif tag ' + esc(tag) : '') + '">' + esc(k) + '</button>').join('') +
+    (replie ? '<button type="button" class="plus-sous" data-sous-ouvrir>' + (choisies.length ? '+' : '+ préciser') + '</button>'
+      : attr === 'data-categorie' ? '<button type="button" class="plus-sous" data-sous-fermer>OK</button>' : '') + '</div>';
+};
 
 /** Même règle que le serveur : {{Champ}} remplacé, variable vide supprimée avec l'espace qui la précède. */
 function rendre(modele, vars) {
@@ -1482,8 +1508,7 @@ function pageFiche() {
           '<div class="doux" style="font-size:14px;padding-left:1px">' + esc([contactClient(c), c.Ville].filter(Boolean).join(' · ') || 'Contact à compléter') + '</div>' +
           '<div class="faits">' + faits + '</div>' +
           '<div class="choix-tag">' + d.tags.map(t => '<button data-tag="' + t + '" class="' + (c.Tag === t ? 'actif tag ' + t : '') + '">' + t + '</button>').join('') + '</div>' +
-          (categoriesDe(c.Tag).length ? '<div class="choix-tag sous-tag"><span class="pale petit">' + esc(c.Tag) + ' ·</span>' + categoriesDe(c.Tag).map(k =>
-            '<button data-categorie="' + esc(k) + '" class="' + (c['Catégorie'] === k ? 'actif tag ' + esc(c.Tag) : '') + '">' + esc(k) + '</button>').join('') + '</div>' : '') +
+          sousTagsHtml(c.Tag, c['Catégorie'], 'data-categorie', !(S.sousOuvert === c.ID)) +
           '<div class="owner-ligne">' + avatar(c.Owner || '?', 's') + '<select data-champ="Owner" aria-label="Contact owner">' +
             ['', ...d.owners].map(o => '<option value="' + esc(o) + '"' + (c.Owner === o ? ' selected' : '') + '>' + esc(o ? 'Owner : ' + o : 'Sans owner') + '</option>').join('') + '</select></div>' +
           '<div class="actions-fiche">' +
@@ -1512,11 +1537,16 @@ function pageFiche() {
     if (tag === c.Tag) return;
     if (tag === 'Lost' && commandesDe(c.ID).length) return fenetreChurn(c);
     // La catégorie ne suit que si elle existe pour le nouveau tag.
-    enregistrerChamps(c.ID, { Tag: tag, 'Catégorie': categoriesDe(tag).includes(c['Catégorie']) ? c['Catégorie'] : '' }, null, true);
+    S.sousOuvert = categoriesDe(tag).length ? c.ID : null; // nouveau tag : ses sous-catégories s'ouvrent pour préciser tout de suite
+    enregistrerChamps(c.ID, { Tag: tag, 'Catégorie': categoriesPour(tag, c['Catégorie']) }, null, true);
   });
+  $$('[data-sous-ouvrir]').forEach(b => b.onclick = () => { S.sousOuvert = c.ID; pageFiche(); });
+  $$('[data-sous-fermer]').forEach(b => b.onclick = () => { S.sousOuvert = null; pageFiche(); });
+  // Sous-catégories : un clic ajoute, un autre clic retire (plusieurs possibles, comme dans HubSpot).
   $$('[data-categorie]').forEach(b => b.onclick = () => {
-    const k = b.dataset.categorie;
-    enregistrerChamps(c.ID, { 'Catégorie': c['Catégorie'] === k ? '' : k }, null, true);
+    const k = b.dataset.categorie, avant = listeCategories(c['Catégorie']);
+    const apres = avant.includes(k) ? avant.filter(x => x !== k) : avant.concat(k);
+    enregistrerChamps(c.ID, { 'Catégorie': categoriesDe(c.Tag).filter(x => apres.includes(x)).join(', ') }, null, true);
   });
   $$('[data-deplier]').forEach(b => b.onclick = () => {
     S.deplies = S.deplies || {};
@@ -1828,17 +1858,29 @@ function fenetreAppel(c, tache) {
       ['Joint', 'Pas de réponse', 'Messagerie', 'Mauvais numéro'].map((r, i) => '<button data-r="' + r + '" class="' + (i === 0 ? 'actif' : '') + '">' + r + '</button>').join('') + '</div></div>' +
     '<label class="champ"><span>Compte rendu</span><textarea id="apTxt" placeholder="Ce qui s’est dit, besoins, objections…"></textarea></label>' +
     '<div class="champ"><span class="doux petit" style="display:block;margin-bottom:6px">Tag après l’appel <b style="color:var(--danger)">*</b> <span class="pale">(obligatoire pour valider · actuel : ' + esc(c.Tag || '—') + ')</span></span>' +
-      '<div class="choix-tag" id="apTags" style="margin-bottom:14px">' + S.d.tags.map(t => '<button type="button" data-aptag="' + t + '">' + t + '</button>').join('') + '</div></div>' +
+      '<div class="choix-tag" id="apTags">' + S.d.tags.map(t => '<button type="button" data-aptag="' + t + '">' + t + '</button>').join('') + '</div>' +
+      '<div id="apSous" style="margin-bottom:14px"></div></div>' +
     '<label class="champ"><span>Devis</span><select id="apDevis"><option value="">Inchangé (' + esc(c.Devis || 'Aucun') + ')</option>' + S.d.devis.map(t => '<option>' + t + '</option>').join('') + '</select></label>' +
     '<label class="interrupteur" style="margin-bottom:12px"><input type="checkbox" id="apRappel"><i></i>Programmer un rappel</label>' +
     '<div id="apZone" class="grille-2" style="display:none"><label class="champ"><span>Date</span><input type="date" id="apDate" value="' + dateLocale(new Date(Date.now() + 864e5)) + '"></label>' +
       '<label class="champ"><span>Heure</span><input type="time" id="apHeure" value="10:00"></label></div>',
     pied: '<span class="gauche pale petit" id="apAide">Choisissez un tag pour valider</span><button class="btn" data-fermer id="apAnnuler">Annuler</button><button class="btn principal" id="apOk" disabled>Enregistrer l’appel</button>', fermable: false });
-  let resultat = 'Joint', tag = '';
+  let resultat = 'Joint', tag = '', sous = '';
+  // Sous-catégories du tag choisi (facultatives, plusieurs possibles) ; on part de celles de la fiche si le tag ne change pas.
+  const dessinerSous = () => {
+    f.$('#apSous').innerHTML = sousTagsHtml(tag, sous, 'data-apsous');
+    f.el.querySelectorAll('[data-apsous]').forEach(b => b.onclick = () => {
+      const k = b.dataset.apsous, avant = listeCategories(sous);
+      sous = categoriesDe(tag).filter(x => (avant.includes(k) ? avant.filter(y => y !== k) : avant.concat(k)).includes(x)).join(', ');
+      dessinerSous();
+    });
+  };
   // Choisir le tag est obligatoire pour valider l'appel
   f.el.querySelectorAll('[data-aptag]').forEach(b => b.onclick = () => {
     tag = b.dataset.aptag;
+    sous = categoriesPour(tag, client(c.ID)['Catégorie']);
     f.el.querySelectorAll('[data-aptag]').forEach(x => { x.className = x === b ? 'actif tag ' + tag : ''; });
+    dessinerSous();
     f.$('#apOk').disabled = false;
     f.$('#apAide').textContent = '';
   });
@@ -1877,6 +1919,7 @@ function fenetreAppel(c, tache) {
     const changes = {};
     if (!tag) return toast('Choisissez un tag pour valider l’appel', true);
     if (tag !== client(c.ID).Tag) changes.Tag = tag;
+    if (sous !== String(client(c.ID)['Catégorie'] || '')) changes['Catégorie'] = sous;
     if (f.$('#apDevis').value) changes.Devis = f.$('#apDevis').value;
     if (Object.keys(changes).length) etapes.push(appel('crmEnregistrerClient', c.ID, changes).then(x => majClient(x)));
     if (f.$('#apRappel').checked) etapes.push(appel('crmTache', { clientId: c.ID, type: 'Appel', titre: 'Rappeler ' + (c['Prénom'] || nomClient(c)),
