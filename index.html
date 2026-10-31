@@ -235,9 +235,20 @@
   .choix-tag button:hover { border-color: var(--acier); }
   .choix-tag button.actif { border-color: transparent; }
   .sous-tag { margin-top: 6px; align-items: center; }
-  .sous-tag button { padding: 2px 9px; font-size: 11.5px; border-style: dashed; }
-  .sous-tag button.actif { border-style: solid; }
-  .sous-tag button.plus-sous { border-color: transparent; background: none; color: var(--acier); font-weight: 600; padding: 2px 6px; }
+  /* Raisons du tag (comme les « Reasons » de HubSpot) : étiquettes retirables + liste à cocher avec recherche */
+  .raisons { position: relative; margin-top: 10px; }
+  .raisons-titre { font-size: 12.5px; color: var(--doux); margin-bottom: 5px; }
+  .raisons-champ { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-height: 30px; padding: 3px 4px; border: 1px solid var(--trait); border-radius: 8px; background: #fff; cursor: pointer; }
+  .raisons-champ:hover { border-color: var(--acier); }
+  .raisons-champ .vide { color: var(--pale, #9aa5ab); font-size: 13px; padding: 0 4px; }
+  .raison { display: inline-flex; align-items: center; gap: 6px; background: #eef1f3; border: 1px solid #d5dde2; border-radius: 6px; padding: 2px 4px 2px 8px; font-size: 12.5px; color: #1d282e; }
+  .raison button { border: 0; background: none; color: #66737a; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 3px; }
+  .raisons-champ .fleche { margin-left: auto; border: 0; background: none; color: #1d282e; font-size: 11px; padding: 0 6px; cursor: pointer; }
+  .raisons-liste { position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px; z-index: 30; background: #fff; border: 1px solid var(--trait); border-radius: 12px; box-shadow: 0 8px 28px rgba(29,40,46,.16); padding: 10px 0 6px; max-height: 300px; overflow: auto; }
+  .raisons-liste input[type=search] { display: block; width: calc(100% - 20px); margin: 0 10px 6px; padding: 8px 12px; border: 1px solid var(--trait); border-radius: 999px; font: inherit; font-size: 14px; }
+  .raisons-liste label { display: flex; align-items: center; gap: 10px; padding: 8px 14px; font-size: 14px; cursor: pointer; }
+  .raisons-liste label:hover { background: #f2f4f6; }
+  .raisons-liste input[type=checkbox] { width: 17px; height: 17px; margin: 0; accent-color: #1d282e; }
   .owner-ligne { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
   .owner-ligne select { width: auto; flex: 1; padding: 6px 10px; }
   .actions-fiche { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 18px; }
@@ -609,7 +620,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-0212';
+const VERSION_APP = '2026.10.31-0222';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -912,30 +923,59 @@ function doublonsDe(c) {
 }
 const fermerRachats = (clientId, sauf) => S.d.taches.forEach(t => { if (t.ClientID === clientId && !t.Faite && t.ID !== sauf && /^Rachat ·/.test(t.Titre)) t.Faite = true; });
 const inscriptionActive = clientId => S.d.inscriptions.find(i => i.ClientID === clientId && i.Statut === 'En cours');
-/** Tag + sous-catégories (« Lost · Better pricing +1 » ; toutes dans l'infobulle). */
+/** Tag + raisons (« Lost better pricing +1 » ; toutes dans l'infobulle). */
 const tagHtml = (t, cat) => {
   if (!t) return '<span class="pale">—</span>';
-  const k = listeCategories(cat);
-  return '<span class="tag ' + esc(t) + '"' + (k.length > 1 ? ' title="' + esc(t + ' · ' + k.join(', ')) + '"' : '') + '>' + esc(t) + (k.length ? ' · ' + esc(k[0]) + (k.length > 1 ? ' +' + (k.length - 1) : '') : '') + '</span>';
+  const k = listeCategories(cat, t);
+  return '<span class="tag ' + esc(t) + '"' + (k.length > 1 ? ' title="' + esc(k.join(', ')) + '"' : '') + '>' + esc(k[0] || t) + (k.length > 1 ? ' +' + (k.length - 1) : '') + '</span>';
 };
 const categoriesDe = tag => ((S.d && S.d.tagCategories) || {})[tag] || [];
-/** Sous-catégories cumulables, gardées dans la colonne Catégorie sous la forme « A, B ». */
-const listeCategories = v => String(v || '').split(',').map(x => x.trim()).filter(Boolean);
-/** Sous-catégories gardées quand le tag change : seulement celles qui existent pour le nouveau tag. */
-const categoriesPour = (tag, v) => listeCategories(v).filter(k => categoriesDe(tag).includes(k)).join(', ');
+/** Raisons cumulables (colonne Catégorie, « A, B ») ; une ancienne valeur sans le tag (« Unreachable ») prend le nom complet (« Lost unreachable »). */
+const listeCategories = (v, tag) => String(v || '').split(',').map(x => x.trim()).filter(Boolean)
+  .map(k => categoriesDe(tag).find(x => [k, tag + ' ' + k].some(y => y.toLowerCase() === x.toLowerCase())) || k);
+/** Raisons gardées quand le tag change : seulement celles qui existent pour le nouveau tag. */
+const categoriesPour = (tag, v, ancienTag) => listeCategories(v, ancienTag || tag).filter(k => categoriesDe(tag).includes(k)).join(', ');
+const ICONE_RAISONS = { Lost: '❌', Unqualified: '❌', Exclusion: '🚫' };
 /**
- * Ligne de sous-catégories (petites pastilles, plusieurs possibles) ; `attr` = attribut data- des boutons.
- * Repliée : seulement celles choisies + « + préciser » (data-sous-ouvrir) qui déplie toute la liste.
+ * Champ « Lost - Reasons » (comme HubSpot) : raisons choisies en étiquettes (× pour retirer) ; un clic ouvre la liste
+ * avec recherche et cases à cocher. `cle` identifie le champ (il reste ouvert pendant qu'on coche).
  */
-const sousTagsHtml = (tag, v, attr, replie) => {
-  const toutes = categoriesDe(tag), choisies = listeCategories(v);
+function raisonsHtml(tag, v, cle) {
+  const toutes = categoriesDe(tag), choisies = listeCategories(v, tag);
   if (!toutes.length) return '';
-  const montrees = replie ? toutes.filter(k => choisies.includes(k)) : toutes;
-  return '<div class="choix-tag sous-tag"><span class="pale petit">' + esc(tag) + ' ·</span>' +
-    montrees.map(k => '<button type="button" ' + attr + '="' + esc(k) + '" class="' + (choisies.includes(k) ? 'actif tag ' + esc(tag) : '') + '">' + esc(k) + '</button>').join('') +
-    (replie ? '<button type="button" class="plus-sous" data-sous-ouvrir>' + (choisies.length ? '+' : '+ préciser') + '</button>'
-      : attr === 'data-categorie' ? '<button type="button" class="plus-sous" data-sous-fermer>OK</button>' : '') + '</div>';
-};
+  const ouvert = S.raisons && S.raisons.cle === cle, q = ouvert ? S.raisons.q || '' : '';
+  return '<div class="raisons" data-raisons="' + esc(cle) + '"><div class="raisons-titre">' + (ICONE_RAISONS[tag] || '') + ' ' + esc(tag) + ' - Reasons</div>' +
+    '<div class="raisons-champ">' + (choisies.length ? choisies.map(k => '<span class="raison">' + esc(k) + '<button type="button" data-retirer="' + esc(k) + '" aria-label="Retirer">×</button></span>').join('') : '<span class="vide">Choisir…</span>') +
+    '<button type="button" class="fleche" aria-label="Choisir les raisons">▼</button></div>' +
+    (ouvert ? '<div class="raisons-liste"><input type="search" placeholder="Search" value="' + esc(q) + '">' +
+      toutes.map(k => '<label' + (q && !k.toLowerCase().includes(q.toLowerCase()) ? ' hidden' : '') + '><input type="checkbox" data-raison="' + esc(k) + '"' + (choisies.includes(k) ? ' checked' : '') + '>' + esc(k) + '</label>').join('') + '</div>' : '') + '</div>';
+}
+/** Branche un champ de raisons : `lire()` donne la valeur actuelle, `ecrire(v)` l'enregistre, `redessiner()` le réaffiche. */
+function brancherRaisons(racine, tag, lire, ecrire, redessiner) {
+  const z = racine.querySelector('.raisons');
+  if (!z) return;
+  const cle = z.dataset.raisons;
+  const changer = (k, oui) => { const a = listeCategories(lire(), tag); ecrire(categoriesDe(tag).filter(x => x === k ? oui : a.includes(x)).join(', ')); };
+  z.querySelector('.raisons-champ').onclick = e => {
+    if (e.target.closest('[data-retirer]')) return changer(e.target.closest('[data-retirer]').dataset.retirer, false);
+    S.raisons = S.raisons && S.raisons.cle === cle ? null : { cle, q: '' };
+    redessiner();
+  };
+  z.querySelectorAll('[data-raison]').forEach(c => c.onchange = () => changer(c.dataset.raison, c.checked));
+  const champ = z.querySelector('input[type=search]');
+  if (champ) {
+    champ.focus();
+    champ.setSelectionRange(champ.value.length, champ.value.length);
+    champ.oninput = () => { S.raisons.q = champ.value; z.querySelectorAll('.raisons-liste label').forEach(l => { l.hidden = !!champ.value && !l.textContent.toLowerCase().includes(champ.value.toLowerCase()); }); };
+  }
+  // Clic ailleurs : la liste se ferme
+  if (S.raisons && S.raisons.cle === cle) setTimeout(() => document.addEventListener('mousedown', function fermer(e) {
+    if (!z.isConnected) return document.removeEventListener('mousedown', fermer); // champ redessiné : un nouvel écouteur a pris le relais
+    if (z.contains(e.target)) return;
+    document.removeEventListener('mousedown', fermer);
+    if (S.raisons && S.raisons.cle === cle) { S.raisons = null; redessiner(); }
+  }), 0);
+}
 
 /** Même règle que le serveur : {{Champ}} remplacé, variable vide supprimée avec l'espace qui la précède. */
 function rendre(modele, vars) {
@@ -1514,7 +1554,7 @@ function pageFiche() {
           '<div class="doux" style="font-size:14px;padding-left:1px">' + esc([contactClient(c), c.Ville].filter(Boolean).join(' · ') || 'Contact à compléter') + '</div>' +
           '<div class="faits">' + faits + '</div>' +
           '<div class="choix-tag">' + d.tags.map(t => '<button data-tag="' + t + '" class="' + (c.Tag === t ? 'actif tag ' + t : '') + '">' + t + '</button>').join('') + '</div>' +
-          sousTagsHtml(c.Tag, c['Catégorie'], 'data-categorie', !(S.sousOuvert === c.ID)) +
+          raisonsHtml(c.Tag, c['Catégorie'], 'fiche-' + c.ID) +
           '<div class="owner-ligne">' + avatar(c.Owner || '?', 's') + '<select data-champ="Owner" aria-label="Contact owner">' +
             ['', ...d.owners].map(o => '<option value="' + esc(o) + '"' + (c.Owner === o ? ' selected' : '') + '>' + esc(o ? 'Owner : ' + o : 'Sans owner') + '</option>').join('') + '</select></div>' +
           '<div class="actions-fiche">' +
@@ -1543,17 +1583,11 @@ function pageFiche() {
     if (tag === c.Tag) return;
     if (tag === 'Lost' && commandesDe(c.ID).length) return fenetreChurn(c);
     // La catégorie ne suit que si elle existe pour le nouveau tag.
-    S.sousOuvert = categoriesDe(tag).length ? c.ID : null; // nouveau tag : ses sous-catégories s'ouvrent pour préciser tout de suite
-    enregistrerChamps(c.ID, { Tag: tag, 'Catégorie': categoriesPour(tag, c['Catégorie']) }, null, true);
+    S.raisons = categoriesDe(tag).length ? { cle: 'fiche-' + c.ID, q: '' } : null; // nouveau tag : ses raisons s'ouvrent pour préciser tout de suite
+    enregistrerChamps(c.ID, { Tag: tag, 'Catégorie': categoriesPour(tag, c['Catégorie'], c.Tag) }, null, true);
   });
-  $$('[data-sous-ouvrir]').forEach(b => b.onclick = () => { S.sousOuvert = c.ID; pageFiche(); });
-  $$('[data-sous-fermer]').forEach(b => b.onclick = () => { S.sousOuvert = null; pageFiche(); });
-  // Sous-catégories : un clic ajoute, un autre clic retire (plusieurs possibles, comme dans HubSpot).
-  $$('[data-categorie]').forEach(b => b.onclick = () => {
-    const k = b.dataset.categorie, avant = listeCategories(c['Catégorie']);
-    const apres = avant.includes(k) ? avant.filter(x => x !== k) : avant.concat(k);
-    enregistrerChamps(c.ID, { 'Catégorie': categoriesDe(c.Tag).filter(x => apres.includes(x)).join(', ') }, null, true);
-  });
+  // Raisons du tag (plusieurs possibles, comme dans HubSpot) : la liste reste ouverte pendant qu'on coche.
+  brancherRaisons(document, c.Tag, () => client(c.ID)['Catégorie'], v => enregistrerChamps(c.ID, { 'Catégorie': v }, null, true), pageFiche);
   $$('[data-deplier]').forEach(b => b.onclick = () => {
     S.deplies = S.deplies || {};
     const k = b.dataset.deplier, z = $('[data-second="' + k + '"]');
@@ -1874,17 +1908,14 @@ function fenetreAppel(c, tache) {
   let resultat = 'Joint', tag = '', sous = '';
   // Sous-catégories du tag choisi (facultatives, plusieurs possibles) ; on part de celles de la fiche si le tag ne change pas.
   const dessinerSous = () => {
-    f.$('#apSous').innerHTML = sousTagsHtml(tag, sous, 'data-apsous');
-    f.el.querySelectorAll('[data-apsous]').forEach(b => b.onclick = () => {
-      const k = b.dataset.apsous, avant = listeCategories(sous);
-      sous = categoriesDe(tag).filter(x => (avant.includes(k) ? avant.filter(y => y !== k) : avant.concat(k)).includes(x)).join(', ');
-      dessinerSous();
-    });
+    f.$('#apSous').innerHTML = raisonsHtml(tag, sous, 'appel-' + c.ID);
+    brancherRaisons(f.$('#apSous'), tag, () => sous, v => { sous = v; dessinerSous(); }, dessinerSous);
   };
   // Choisir le tag est obligatoire pour valider l'appel
   f.el.querySelectorAll('[data-aptag]').forEach(b => b.onclick = () => {
     tag = b.dataset.aptag;
-    sous = categoriesPour(tag, client(c.ID)['Catégorie']);
+    sous = categoriesPour(tag, client(c.ID)['Catégorie'], client(c.ID).Tag);
+    S.raisons = null;
     f.el.querySelectorAll('[data-aptag]').forEach(x => { x.className = x === b ? 'actif tag ' + tag : ''; });
     dessinerSous();
     f.$('#apOk').disabled = false;
