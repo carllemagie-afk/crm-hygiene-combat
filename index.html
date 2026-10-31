@@ -62,6 +62,23 @@
   .nav button.actif { background: rgba(255,255,255,.12); color: #fff; font-weight: 600; }
   .nav button.actif::before { content: ""; position: absolute; left: -14px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--acier); }
   .nav .compteur { margin-left: auto; font-size: 11.5px; font-weight: 600; background: var(--acier); color: var(--ardoise-900); border-radius: 999px; padding: 0 7px; line-height: 19px; }
+  .nav .compteur.alerte { background: var(--danger); color: #fff; }
+  .recu { display: flex; gap: 14px; padding: 15px 18px; border-bottom: 1px solid var(--trait); align-items: flex-start; }
+  .recu:last-child { border-bottom: 0; }
+  .recu.traite { opacity: .62; }
+  .recu .point { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); margin-top: 7px; flex: none; }
+  .recu.traite .point { background: transparent; }
+  .recu .corps { flex: 1; min-width: 0; }
+  .recu .haut { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .recu .haut .quand { margin-left: auto; font-size: 12.5px; color: var(--pale, #8a97a3); white-space: nowrap; }
+  .recu .objet { font-weight: 600; margin: 3px 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .recu .extrait { color: var(--doux, #5b6874); font-size: 13.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+  .recu .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .recu .actions .btn { padding: 6px 11px; font-size: 13px; }
+  .puce.nouvelle { background: #fff1d6; color: #8a5a00; }
+  .choix-fiche { display: flex; flex-direction: column; max-height: 50vh; overflow: auto; margin-top: 10px; }
+  .choix-fiche button { text-align: left; padding: 10px 12px; border: 0; background: none; border-bottom: 1px solid var(--trait); cursor: pointer; font: inherit; }
+  .choix-fiche button:hover { background: var(--acier-50); }
   .nav .pied-nav { margin-top: auto; padding: 12px; border-radius: 12px; background: rgba(255,255,255,.06); display: flex; align-items: center; gap: 10px; cursor: pointer; }
   .nav .pied-nav small { display: block; color: rgba(255,255,255,.55); font-size: 11.5px; }
   .zone { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -620,9 +637,9 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-0222';
+const VERSION_APP = '2026.10.31-0254';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
-  ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'sequences', inscriptionsToutes: false, csv: null, brouillonSeq: null };
+  ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
 const ICONES = {
   clients: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
@@ -746,17 +763,13 @@ function signatureHtml(p, lienRdv, marque) {
   // Téléphone (Gmail, Apple Mail) : cercles et logo plus petits, pour que la signature tienne dans la largeur de l'écran.
   const styleTelephone = '<style>@media screen and (max-width:480px){.hc-case{width:72px!important}.hc-photo{width:72px!important;height:72px!important;border-radius:36px!important;line-height:72px!important;font-size:26px!important}' +
     '.hc-casel{width:80px!important}.hc-logo{width:80px!important;height:69px!important}.hc-texte{padding:0 10px!important}.hc-nom{font-size:16px!important;line-height:21px!important}' +
-    '.hc-petit{font-size:13px!important;line-height:19px!important}}</style>' +
-    // Mode sombre (Apple Mail, Outlook) : logo au trait blanc à la place de l'écusson. Ailleurs (Gmail), l'écusson blanc reste lisible.
-    // Bloc à part : si une messagerie rejette ces règles, la mise en page téléphone ci-dessus est gardée.
-    '<style>@media (prefers-color-scheme:dark){.hc-logo-jour{display:none!important}.hc-logo-nuit{display:block!important;max-height:none!important;overflow:visible!important}}' +
-    '[data-ogsc] .hc-logo-jour{display:none!important}[data-ogsc] .hc-logo-nuit{display:block!important;max-height:none!important;overflow:visible!important}</style>';
+    '.hc-petit{font-size:13px!important;line-height:19px!important}}</style>';
   const photo = p.photo
     ? '<img src="' + e(p.photo) + '" class="hc-photo" width="108" height="108" alt="' + e(p.nom) + '" style="display:block;border:0;width:108px;height:108px;border-radius:54px;">'
     : '<div class="hc-photo" style="width:108px;height:108px;border-radius:54px;background-color:#afdbfc;text-align:center;' + police + 'font-size:36px;line-height:108px;font-weight:bold;color:#1a1a1a;">' + e(initiales) + '</div>';
-  // Logo sur fond transparent : écusson blanc détouré (lisible sur fond clair comme sombre), version au trait blanc en mode sombre.
-  const logo = '<img src="' + ADRESSE_IMAGES + 'signature-logo-plaque.png" class="hc-logo hc-logo-jour" width="137" height="118" alt="Hygiène &amp; Combat" style="display:block;border:0;width:137px;height:118px;">' +
-    '<!--[if !mso]><!--><img src="' + ADRESSE_IMAGES + 'signature-logo-nuit.png" class="hc-logo hc-logo-nuit" width="137" height="118" alt="" style="display:none;max-height:0;overflow:hidden;border:0;width:137px;height:118px;"><!--<![endif]-->';
+  // Logo sur fond transparent : écusson blanc détouré, lisible sur fond clair comme sombre. Les images de la signature sont
+  // intégrées à l'e-mail à l'envoi (construireMime : cid:), elles s'affichent même quand les images distantes sont bloquées.
+  const logo = '<img src="' + ADRESSE_IMAGES + 'signature-logo-plaque.png" class="hc-logo" width="137" height="118" alt="Hygiène &amp; Combat" style="display:block;border:0;width:137px;height:118px;">';
   const ligne = (icone, texte, lien) => '<tr><td class="hc-petit" style="' + police + 'font-size:15px;line-height:24px;font-weight:bold;color:#1a1a1a;padding-top:6px;white-space:nowrap;">' + icone + '&nbsp;' +
     '<a href="' + e(lien) + '" style="color:#1a1a1a;text-decoration:none;">' + e(texte) + '</a></td></tr>';
   const bouton = (lien, texte, fond, couleur) => '<a href="' + e(lien) + '" style="display:block;' + police + 'font-size:15px;line-height:20px;font-weight:bold;color:' + couleur +
@@ -1019,6 +1032,7 @@ function lancerCRM() {
       afficher();
       surveiller();
       verifierFraicheur(true);
+      resumeEmails();
       return;
     }
     return appelDiscret('crmSession', jeton).then(ouvrirSession);
@@ -1035,6 +1049,7 @@ function ouvrirSession(r) {
   document.body.classList.remove('deconnecte');
   afficher();
   surveiller();
+  resumeEmails();
 }
 
 function sessionPerdue() {
@@ -1086,6 +1101,7 @@ function recevoir(r, base) {
   if (!r || !S.d) return;
   if (r.data) return appliquerDonnees(r.data);
   if (!r.changements || (base !== undefined && String(base) !== String(S.d.version))) return; // réponse dépassée : la suivante rattrape
+  const avant = idsATraiter();
   r.changements.forEach(c => {
     const liste = S.d[TABLES_APP[c.t]];
     if (!liste) return;
@@ -1095,6 +1111,7 @@ function recevoir(r, base) {
   });
   S.d.version = r.version;
   redessiner();
+  notifierEmails(avant);
 }
 /** Saisie en cours dans la page (hors recherche) : on attend la fin de la saisie pour redessiner. */
 function saisieEnCours() {
@@ -1105,8 +1122,10 @@ function saisieEnCours() {
 function appliquerDonnees(d) {
   if (saisieEnCours()) { S.enAttente = d; return; }
   S.enAttente = null;
+  const avant = S.d ? idsATraiter() : null;
   S.d = d;
   redessiner();
+  if (avant) notifierEmails(avant);
 }
 function redessiner() {
   if (saisieEnCours()) { S.aRedessiner = true; return; }
@@ -1215,16 +1234,17 @@ function deconnecter() {
 
 function menus() {
   const tachesDuJour = S.d.taches.filter(t => !t.Faite && t.Owner === S.moi && t['Échéance'] && new Date(t['Échéance']) < new Date(debutJour().getTime() + 864e5)).length;
+  const nb = { taches: tachesDuJour, emails: emailsATraiter().length };
   const actif = p => (S.page === p.id || (p.id === 'clients' && ['fiche', 'import'].includes(S.page)) || (p.id === 'emails' && S.page === 'sequence') ||
     (p.id === 'plus' && ['agenda', 'calculateur', 'stock', 'reglages'].includes(S.page))) ? 'actif' : '';
   const bouton = p => '<button data-aller="' + p.id + '" class="' + actif(p) + '">' + ico(p.ico) + p.nom +
-    (p.id === 'taches' && tachesDuJour ? '<span class="compteur">' + tachesDuJour + '</span>' : '') + '</button>';
+    (nb[p.id] ? '<span class="compteur' + (p.id === 'emails' ? ' alerte' : '') + '">' + nb[p.id] + '</span>' : '') + '</button>';
   $('#nav').innerHTML = '<div class="marque">' + BOUCLIER + '<div><b>HYGIÈNE &amp; COMBAT</b><span>CRM</span></div></div>' +
     PAGES.filter(p => !PAGES_BAS.includes(p.id)).map(bouton).join('') +
     '<div class="nav-bas">' + PAGES_BAS.map(id => bouton(PAGES.find(p => p.id === id))).join('') + '</div>' +
     '<div class="pied-nav" data-aller="reglages">' + avatar(S.moi || '?', 's') + '<div><b style="font-size:13.5px">' + esc(S.moi) + '</b><small>' + esc(S.d.compte) + '</small></div></div>';
   $('#navMobile').innerHTML = PAGES.filter(p => p.mobile).concat([{ id: 'plus', nom: 'Plus', ico: 'menu' }]).map(p => '<button data-aller="' + p.id + '" class="' + actif(p) + '">' + ico(p.ico) + p.nom +
-    (p.id === 'taches' && tachesDuJour ? '<span class="pastille-nb">' + tachesDuJour + '</span>' : '') + '</button>').join('');
+    (nb[p.id] ? '<span class="pastille-nb">' + nb[p.id] + '</span>' : '') + '</button>').join('');
   $('#barreMobile').innerHTML = BOUCLIER + '<b>HYGIÈNE &amp; COMBAT</b><span class="espace"></span>' + avatar(S.moi || '?', 's');
   $$('[data-aller]').forEach(b => b.onclick = () => b.dataset.aller === 'plus' ? menuPlus() : aller(b.dataset.aller));
 }
@@ -2617,19 +2637,127 @@ function pageEmails() {
   const d = S.d;
   const enCours = d.inscriptions.filter(i => i.Statut === 'En cours');
   const onglet = S.ongletEmails;
-  $('#page').innerHTML = '<div class="page"><div class="entete"><div><h1>E-mails</h1><p>Séquences automatiques et modèles, envoyés depuis contact@.</p></div>' +
+  $('#page').innerHTML = '<div class="page"><div class="entete"><div><h1>E-mails</h1><p>' + (onglet === 'recus' ? 'E-mails reçus sur contact@, chacun rattaché à sa fiche.' : 'Séquences automatiques et modèles, envoyés depuis contact@.') + '</p></div>' +
     (onglet === 'sequences' ? '<button class="btn principal" id="nouvSeq">' + ico('plus') + 'Nouvelle séquence</button>' : onglet === 'modeles' ? '<button class="btn principal" id="nouvMod">' + ico('plus') + 'Nouveau modèle</button>' : '') + '</div>' +
-    '<div class="stats">' +
+    (onglet === 'recus' ? '' : '<div class="stats">' +
       '<div class="carte stat"><div class="etiquette">Envois automatiques</div><label class="interrupteur" style="margin-top:10px"><input type="checkbox" id="auto"' + (d.automatisation ? ' checked' : '') + '><i></i>' + (d.automatisation ? 'Activés' : 'En pause') + '</label></div>' +
       '<div class="carte stat"><div class="etiquette">Envoyés aujourd’hui</div><b>' + d.envoisAujourdhui + ' <span class="pale" style="font-size:15px;font-weight:500">/ ' + esc(d.reglages.QUOTA_JOUR) + '</span></b></div>' +
       '<div class="carte stat"><div class="etiquette">Clients en séquence</div><b>' + enCours.length + '</b></div>' +
-      '<div class="carte stat"><div class="etiquette">Ont répondu</div><b>' + d.inscriptions.filter(i => i.Statut === 'Répondu').length + '</b></div></div>' +
-    '<div class="segment" style="margin-bottom:18px">' + [['sequences', 'Séquences'], ['modeles', 'Modèles'], ['inscriptions', 'Inscriptions']].map(([k, n]) =>
+      '<div class="carte stat"><div class="etiquette">Ont répondu</div><b>' + d.inscriptions.filter(i => i.Statut === 'Répondu').length + '</b></div></div>') +
+    '<div class="segment" style="margin-bottom:18px">' + [['recus', 'Reçus'], ['sequences', 'Séquences'], ['modeles', 'Modèles'], ['inscriptions', 'Inscriptions']].map(([k, n]) =>
       '<button data-ong="' + k + '" class="' + (onglet === k ? 'actif' : '') + '">' + n + '</button>').join('') + '</div>' +
     '<div id="contenuEmails"></div></div>';
   $$('[data-ong]').forEach(b => b.onclick = () => { S.ongletEmails = b.dataset.ong; pageEmails(); });
-  $('#auto').onchange = e => appel('crmAutomatisation', e.target.checked).then(a => { d.automatisation = a; pageEmails(); toast(a ? 'Envois automatiques activés' : 'Envois automatiques en pause'); });
-  if (onglet === 'sequences') ongletSequences(); else if (onglet === 'modeles') ongletModeles(); else ongletInscriptions();
+  if ($('#auto')) $('#auto').onchange = e => appel('crmAutomatisation', e.target.checked).then(a => { d.automatisation = a; pageEmails(); toast(a ? 'Envois automatiques activés' : 'Envois automatiques en pause'); });
+  if (onglet === 'recus') ongletRecus(); else if (onglet === 'sequences') ongletSequences(); else if (onglet === 'modeles') ongletModeles(); else ongletInscriptions();
+}
+
+// =================================================================== Boîte de réception (e-mails reçus sur contact@)
+/** E-mails reçus pas encore traités, du plus récent au plus ancien. Chaque e-mail est déjà rattaché à une fiche (créée au besoin). */
+const emailRecu = a => a.Type === 'E-mail' && ['Réponse reçue', 'Adresse en erreur'].includes(a['Résultat']);
+const emailsATraiter = () => S.d.activites.filter(a => a['À traiter'] === 'oui').sort((a, b) => String(b.Date).localeCompare(String(a.Date)));
+const objetEmail = a => (String(a.Texte || '').match(/^Objet : (.*)/) || [])[1] || a['Résultat'] || 'E-mail';
+const extraitEmail = a => String(a.Texte || '').replace(/^Objet : .*\n*/, '').replace(/\n\n\(séquence « .* » arrêtée\)$/, '').trim();
+const ficheAuto = c => c && c.Source === 'E-mail reçu';
+const sansAccents = t => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+function ongletRecus() {
+  const aTraiter = emailsATraiter();
+  const traites = S.recusTraites ? S.d.activites.filter(a => emailRecu(a) && a['À traiter'] !== 'oui' && Date.now() - new Date(a.Date) < 30 * 864e5)
+    .sort((a, b) => String(b.Date).localeCompare(String(a.Date))).slice(0, 40) : [];
+  const ligne = (a, n) => {
+    const c = client(a.ClientID);
+    const fait = a['À traiter'] !== 'oui';
+    return '<div class="recu' + (fait ? ' traite' : '') + '" style="--n:' + Math.min(n, 20) + '"><span class="point"></span><div class="corps">' +
+      '<div class="haut"><b>' + esc(c ? nomClient(c) : 'Fiche supprimée') + '</b>' + (c && c.Email && nomClient(c) !== c.Email ? '<span class="pale petit">' + esc(c.Email) + '</span>' : '') +
+        (ficheAuto(c) ? '<span class="puce nouvelle">Nouvelle fiche</span>' : '') + (a['Résultat'] === 'Adresse en erreur' ? '<span class="puce">Non distribué</span>' : '') +
+        '<span class="quand">' + esc(relatif(a.Date)) + '</span></div>' +
+      '<div class="objet">' + esc(objetEmail(a)) + '</div><div class="extrait">' + esc(extraitEmail(a)) + '</div>' +
+      '<div class="actions">' + (c ? '<button class="btn" data-fiche="' + c.ID + '">' + ico('clients') + (ficheAuto(c) ? 'Compléter la fiche' : 'Ouvrir la fiche') + '</button>' : '') +
+        (c && c.Email ? '<button class="btn" data-repondre="' + a.ID + '">' + ico('mail') + 'Répondre</button>' : '') +
+        (a.ThreadId ? '<a class="btn" target="_blank" rel="noopener" href="https://mail.google.com/mail/?authuser=' + encodeURIComponent(S.d.compte) + '#all/' + esc(a.ThreadId) + '">Gmail</a>' : '') +
+        '<button class="btn" data-rattacher="' + a.ID + '" title="Rattacher à une autre fiche">Rattacher</button>' +
+        (fait ? '<button class="btn fantome" data-traite="' + a.ID + '" data-non>Remettre à traiter</button>' : '<button class="btn principal" data-traite="' + a.ID + '">' + ico('ok') + 'Traité</button>') +
+      '</div></div></div>';
+  };
+  $('#contenuEmails').innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap"><div class="etiquette" style="margin:0">' +
+      (aTraiter.length ? aTraiter.length + ' e-mail' + (aTraiter.length > 1 ? 's' : '') + ' à traiter' : 'Aucun e-mail à traiter') + '</div><span class="espace" style="flex:1"></span>' +
+      (aTraiter.length > 1 ? '<button class="btn fantome" id="toutTraite">Tout marquer traité</button>' : '') +
+      '<label class="interrupteur"><input type="checkbox" id="voirTraites"' + (S.recusTraites ? ' checked' : '') + '><i></i>Voir les traités (30 j)</label></div>' +
+    (aTraiter.length ? '<div class="carte">' + aTraiter.map(ligne).join('') + '</div>'
+      : '<div class="carte vide">' + ico('mail') + '<b>Boîte à jour</b>Chaque e-mail reçu sur ' + esc(S.d.compte) + ' apparaît ici, rattaché à sa fiche (créée automatiquement pour un nouvel expéditeur).</div>') +
+    (traites.length ? '<div class="etiquette" style="margin:20px 0 10px">Traités</div><div class="carte">' + traites.map(ligne).join('') + '</div>' : '');
+  $('#voirTraites').onchange = e => { S.recusTraites = e.target.checked; ongletRecus(); };
+  if ($('#toutTraite')) $('#toutTraite').onclick = e => occupe(e.currentTarget, marquerTraites(aTraiter.map(a => a.ID), true)).then(() => toast('Tous les e-mails sont traités'));
+  $$('#contenuEmails [data-fiche]').forEach(b => b.onclick = () => aller('fiche', b.dataset.fiche));
+  $$('#contenuEmails [data-traite]').forEach(b => b.onclick = () => occupe(b, marquerTraites([b.dataset.traite], !b.hasAttribute('data-non'))));
+  $$('#contenuEmails [data-repondre]').forEach(b => b.onclick = () => {
+    const a = S.d.activites.find(x => x.ID === b.dataset.repondre);
+    const c = client(a.ClientID);
+    fenetreEmail(c, () => marquerTraites(S.d.activites.filter(x => x.ClientID === c.ID && x['À traiter'] === 'oui').map(x => x.ID), true));
+    const objet = $('#emObjet');
+    if (objet && !objet.value) objet.value = /^re\s*:/i.test(objetEmail(a)) ? objetEmail(a) : 'Re: ' + objetEmail(a);
+  });
+  $$('#contenuEmails [data-rattacher]').forEach(b => b.onclick = () => fenetreRattacher(S.d.activites.find(x => x.ID === b.dataset.rattacher)));
+}
+
+function marquerTraites(ids, traite) {
+  if (!ids.length) return Promise.resolve();
+  return appel('crmEmailsTraites', ids, traite).then(liste => {
+    liste.forEach(a => { const i = S.d.activites.findIndex(x => x.ID === a.ID); if (i >= 0) S.d.activites[i] = a; });
+    if (traite) S.d.taches.forEach(t => { if (!t.Faite && /^Répondre à/.test(t.Titre) && liste.some(a => a.ClientID === t.ClientID) && !emailsATraiter().some(a => a.ClientID === t.ClientID)) t.Faite = true; });
+    afficher();
+  });
+}
+
+/** Rattache un e-mail à la bonne fiche ; une fiche créée automatiquement pour cet e-mail est fusionnée dedans. */
+function fenetreRattacher(a) {
+  if (!a) return;
+  const actuelle = client(a.ClientID);
+  const f = fenetre({ titre: 'Rattacher l’e-mail à une fiche', corps:
+    '<p class="doux" style="margin-top:0">« ' + esc(objetEmail(a)) + ' »' + (ficheAuto(actuelle) ? '<br>La fiche créée automatiquement (' + esc(actuelle.Email) + ') sera fusionnée dans celle choisie : son adresse e-mail y sera ajoutée.' : '') + '</p>' +
+    '<input type="search" id="raCherche" placeholder="Salle, nom, e-mail, téléphone…" autocomplete="off"><div class="choix-fiche" id="raListe"></div>' });
+  const liste = () => {
+    const q = sansAccents(f.$('#raCherche').value.trim().toLowerCase());
+    const res = S.d.clients.filter(c => c.ID !== a.ClientID && (!q || sansAccents([c.Salle, c['Prénom'], c.Nom, c.Email, c['Email 2'], c['Téléphone'], c.Ville].join(' ').toLowerCase()).includes(q))).slice(0, 40);
+    f.$('#raListe').innerHTML = res.map(c => '<button data-c="' + c.ID + '"><b>' + esc(nomClient(c)) + '</b> <span class="pale petit">' + esc([c.Email, c.Ville, c.Tag].filter(Boolean).join(' · ')) + '</span></button>').join('') ||
+      '<div class="pale" style="padding:12px">Aucune fiche trouvée.</div>';
+    f.el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => {
+      b.disabled = true;
+      appel('crmRattacherEmail', a.ID, b.dataset.c, S.moi).then(d => { S.d = d; f.fermer(); afficher(); toast('E-mail rattaché à ' + nomClient(client(b.dataset.c))); }, () => { b.disabled = false; });
+    });
+  };
+  f.$('#raCherche').oninput = liste;
+  liste();
+}
+
+/** Alerte quand un e-mail arrive (temps réel) : bandeau dans l'appli, et notification du téléphone / de l'ordinateur si autorisée. */
+const idsATraiter = () => new Set(emailsATraiter().map(a => a.ID));
+function notifierEmails(avant) {
+  const recus = emailsATraiter().filter(a => !avant.has(a.ID) && Date.now() - new Date(a.Date) < 864e5).reverse();
+  if (!recus.length) return;
+  const a = recus[recus.length - 1];
+  const c = client(a.ClientID);
+  const texte = '✉️ ' + (recus.length > 1 ? recus.length + ' nouveaux e-mails' : 'Nouvel e-mail de ' + (c ? nomClient(c) : 'un contact') + ' : ' + objetEmail(a));
+  toast(texte);
+  try {
+    if (document.hidden && window.Notification && Notification.permission === 'granted') {
+      const n = new Notification('Hygiène & Combat CRM', { body: texte.slice(3), tag: 'emails' });
+      n.onclick = () => { window.focus(); S.ongletEmails = 'recus'; aller('emails'); n.close(); };
+    }
+  } catch (e) { /* notifications non disponibles */ }
+}
+
+/** À l'ouverture : combien d'e-mails attendent, avec un accès direct. Demande une fois l'autorisation des notifications. */
+function resumeEmails() {
+  const n = emailsATraiter().length;
+  if (n) {
+    toast('✉️ ' + n + ' e-mail' + (n > 1 ? 's' : '') + ' à traiter : menu E-mails > Reçus');
+    const t = $('#toasts').lastElementChild;
+    if (t) { t.style.cursor = 'pointer'; t.style.pointerEvents = 'auto'; t.onclick = () => { S.ongletEmails = 'recus'; aller('emails'); }; }
+  }
+  try { if (window.Notification && Notification.permission === 'default') document.addEventListener('click', () => Notification.requestPermission(), { once: true }); } catch (e) { /* rien */ }
 }
 
 function ongletSequences() {
