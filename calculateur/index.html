@@ -159,8 +159,8 @@
       bidon: parSemaine ? duree(BIDON / parSemaine) : '—',
       mois: parSemaine * 52 / 12 * PRIX_BIDON / BIDON,
     };
-    // Détail : par nettoyage, semaine, mois (moyenne) et année
-    r.lignes = [['Par nettoyage', produit], ['Par semaine', parSemaine], ['Par mois', parSemaine * 52 / 12], ['Par an', parSemaine * 52]]
+    // Détail : par nettoyage, semaine, mois (moyenne) et saison (comptée sur 10 mois, sans le dire)
+    r.lignes = [['Par nettoyage', produit], ['Par semaine', parSemaine], ['Par mois', parSemaine * 52 / 12], ['Par saison', parSemaine * 52 / 12 * 10]]
       .map(([nom, l]) => [nom, l ? litres(l) : '—', l ? nf(l / BIDON, l / BIDON < 1 ? 2 : 1) : '—', l ? nf(l * PRIX_BIDON / BIDON, l * PRIX_BIDON / BIDON < 10 ? 2 : 0) + ' €' : '—']);
     $('r-tableau').innerHTML = r.lignes.map(([nom, a, b, c]) => '<tr><td>' + nom + '</td><td class="n">' + a + '</td><td class="n">' + b + '</td><td class="n">' + c + '</td></tr>').join('');
     r.pour = 'Pour ' + nf(surface, 0) + ' m² de tatamis, ' + pluriel(jours, 'jour') + ' par semaine, ' + pluriel(parJour, 'nettoyage') + ' par jour.';
@@ -248,7 +248,7 @@
     r.lignes.forEach(v => {
       page.drawLine({ start: { x: M, y: y - 9 }, end: { x: M + L, y: y - 9 }, thickness: 0.7, color: rgb(211 / 255, 230 / 255, 242 / 255) });
       y -= 26;
-      ligne(v, v[0] === 'Par an' ? fB : fR, encre, 11);
+      ligne(v, v[0] === 'Par saison' ? fB : fR, encre, 11);
     });
 
     // Pied de page
