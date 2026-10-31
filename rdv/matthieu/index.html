@@ -258,11 +258,24 @@
   function pageFaite(r, p, titre, enCours) {
     window.scrollTo({ top: 0 });
     $('#app').innerHTML = '<div class="carte fait"><div class="rond">✓</div><h1>' + (titre || 'C’est noté !') + '</h1>' +
-      '<p class="doux" style="margin:4px 0 0">' + (enCours ? '<span class="tour-petit"></span> Enregistrement…' : 'Rendez-vous enregistré. Un e-mail récapitulatif arrive dans votre boîte.') + '</p>' +
+      '<p class="doux" style="margin:4px 0 0">' + (enCours ? '<span class="tour-petit"></span> Enregistrement…'
+        : r.statut === 'Annulé' ? 'Un e-mail de confirmation de l’annulation arrive dans votre boîte.'
+        : (titre ? 'Nouveau créneau enregistré.' : 'Rendez-vous enregistré.') + ' Un e-mail récapitulatif arrive dans votre boîte.') + '</p>' +
       '<dl class="details"><dt>Quand</dt><dd>' + esc(majuscule(r.libelle)) + ' – ' + esc(r.heureFin) + '</dd><dt>Avec</dt><dd>' + esc((r.intervenant && r.intervenant.nom) || (p && p.nom) || '') + '</dd>' +
       '<dt>Comment</dt><dd>📞 Appel' + (r.telephone ? ' au ' + esc(r.telephone) : '') + '</dd></dl>' +
-      (r.gestion ? '<div class="actions"><a class="btn second" href="' + esc(r.gestion) + '">Annuler ou déplacer</a></div>' : '') + '</div>';
+      (r.gestion ? '<div class="actions"><a class="btn second" id="gererIci" href="' + esc(r.gestion) + '">Annuler ou déplacer</a></div>' : '') + '</div>';
+    // « Annuler ou déplacer » s'ouvre dans cette page, sans navigation (certains navigateurs intégrés aux applications, ou le CRM
+    // installé sur le téléphone, bloquaient le lien) ; l'adresse devient celle de la page de gestion.
+    const g = $('#gererIci');
+    if (g) g.onclick = e => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey) return; // nouvel onglet : lien normal
+      e.preventDefault();
+      try { history.pushState(null, '', r.gestion); } catch (x) { /* adresse inchangée */ }
+      window.scrollTo({ top: 0 });
+      pageGerer(String(r.gestion).split('#')[1] || '');
+    };
   }
+  window.addEventListener('popstate', () => location.reload()); // retour arrière après « Annuler ou déplacer » : la page d'avant
 
   // ------------------------------------------------------------------ Gestion : …/rdv/gerer/#jeton
   function pageGerer(jeton) {

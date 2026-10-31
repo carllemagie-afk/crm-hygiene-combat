@@ -637,7 +637,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-0254';
+const VERSION_APP = '2026.10.31-0259';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1864,14 +1864,17 @@ function ouvrirCalculateur(c) {
   z.querySelector('#caFermer').onclick = () => z.remove();
 }
 
+/**
+ * Client qui avait commandé → Lost : churn enregistré tout de suite (relances de rachat arrêtées), sans fenêtre ;
+ * la liste « Lost - Reasons » s'ouvre sur la fiche pour choisir la ou les raisons.
+ */
 function fenetreChurn(c) {
-  const f = fenetre({ titre: 'Ne recommande pas · ' + esc(nomClient(c)), corps:
-    '<p class="doux" style="margin-top:0">Le client passe en <b>Lost</b> et compte dans le churn. Les relances de rachat s’arrêtent.</p>' +
-    '<label class="champ"><span>Raison</span><select id="chR">' + ['Pas satisfait du produit', 'Trop cher', 'A trouvé un autre fournisseur', 'Salle fermée', 'Pas de réponse', 'Autre'].map(o => '<option>' + o + '</option>').join('') + '</select></label>' +
-    '<label class="champ"><span>Précisions</span><input type="text" id="chT" placeholder="Facultatif"></label>',
-    pied: '<button class="btn" data-fermer>Annuler</button><button class="btn principal" id="chOk">Confirmer le churn</button>' });
-  f.$('#chOk').onclick = () => occupe(f.$('#chOk'), appel('crmChurn', c.ID, [f.$('#chR').value, f.$('#chT').value.trim()].filter(Boolean).join(' · '), S.moi))
-    .then(y => { majClient(y); f.fermer(); afficher(); toast('Client passé en Lost (churn)'); });
+  const x = client(c.ID);
+  x.Tag = 'Lost';
+  x['Catégorie'] = categoriesPour('Lost', x['Catégorie'], c.Tag);
+  S.raisons = { cle: 'fiche-' + c.ID, q: '' };
+  afficher();
+  appel('crmChurn', c.ID, '', S.moi).then(y => { majClient(Object.assign(y, { 'Catégorie': x['Catégorie'] })); if (S.page === 'fiche') pageFiche(); });
 }
 
 function carteSequence(c, ins) {
