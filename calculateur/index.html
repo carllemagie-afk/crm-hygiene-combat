@@ -124,8 +124,8 @@
 (() => {
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
-  // Dosage et prix Hygiène & Combat (fixes) : 2 L de solution à 5 % pour 100 m² ; bidon de 5 L à 33 € HT ; 1re commande = 1 carton de 4 bidons.
-  const SOLUTION_M2 = 0.02, DILUTION = 0.05, BIDON = 5, PREMIERE_COMMANDE = 4, PRIX_BIDON = 33;
+  // Dosage et prix Hygiène & Combat (fixes) : 2 L de solution à 5 % pour 100 m² ; bidon de 5 L à 33,33 € HT ; 1re commande = 1 carton de 4 bidons.
+  const SOLUTION_M2 = 0.02, DILUTION = 0.05, BIDON = 5, PREMIERE_COMMANDE = 4, PRIX_BIDON = 33.33;
   const CRM_API = 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec';
   const CRM_CLIENT = params.get('client') || '', CRM_NOM = params.get('nom') || '';
   const salle = (params.get('salle') || CRM_NOM || '').trim();
