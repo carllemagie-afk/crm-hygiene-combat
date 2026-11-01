@@ -678,7 +678,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.01-2059';
+const VERSION_APP = '2026.11.01-2105';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -2000,15 +2000,39 @@ function brancherComparatifs(c) {
   $('#caOuvrir').onclick = () => ouvrirCalculateur(c);
   $$('[data-cp-voir]').forEach(b => b.onclick = () => occupe(b, appel('crmLireComparatif', b.dataset.cpVoir)).then(r => {
     const octets = Uint8Array.from(atob(r.base64), x => x.charCodeAt(0));
-    const url = URL.createObjectURL(new Blob([octets], { type: 'application/pdf' }));
-    const a = document.createElement('a');
-    a.href = url;
-    if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) a.download = r.nom; else a.target = '_blank';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    voirPdf(URL.createObjectURL(new Blob([octets], { type: 'application/pdf' })), r.nom); // affiché dans le CRM, pas téléchargé
   }));
   $$('[data-cp-suppr]').forEach(b => b.onclick = () => confirmer('Supprimer ce PDF ?', 'Le PDF sera retiré de la fiche. Les e-mails déjà envoyés ne changent pas.', 'Supprimer').then(ok => ok &&
     (S.d.comparatifs = S.d.comparatifs.filter(x => x.ID !== b.dataset.cpSuppr), pageFiche(), toast('PDF supprimé'), enFond(appel('crmSupprimerComparatif', b.dataset.cpSuppr)))));
+}
+
+/** Visionneuse : le PDF s'affiche dans le CRM (pdf.js de l'outil comparaison), sans téléchargement ; « Télécharger » reste possible. */
+async function voirPdf(url, nom) {
+  const v = document.createElement('div');
+  v.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(15,20,24,.88);display:flex;flex-direction:column';
+  v.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:var(--ardoise-800);color:#fff;font-weight:600"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(nom || 'PDF') + '</span>' +
+    '<a href="' + url + '" download="' + esc(nom || 'document.pdf') + '" class="btn mini">' + ico('export') + 'Télécharger</a><button type="button" class="btn mini">' + ico('croix') + 'Fermer</button></div>' +
+    '<div style="flex:1;overflow:auto;padding:12px;text-align:center;color:#fff">Chargement…</div>';
+  document.body.appendChild(v);
+  const fermer = () => { v.remove(); document.removeEventListener('keydown', echap); setTimeout(() => URL.revokeObjectURL(url), 1000); };
+  const echap = e => { if (e.key === 'Escape') fermer(); };
+  document.addEventListener('keydown', echap);
+  v.querySelector('button').onclick = fermer;
+  const zone = v.lastElementChild;
+  try {
+    const pdfjs = await import('./comparateur/pdf.mjs');
+    pdfjs.GlobalWorkerOptions.workerSrc = './comparateur/pdf.worker.mjs';
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(await (await fetch(url)).arrayBuffer()), isEvalSupported: false }).promise;
+    zone.textContent = '';
+    const largeur = Math.min(900, zone.clientWidth - 24);
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i), base = page.getViewport({ scale: 1 }), r = window.devicePixelRatio || 1;
+      const vp = page.getViewport({ scale: largeur / base.width * r }), c = document.createElement('canvas');
+      c.width = vp.width; c.height = vp.height; c.style.cssText = 'display:block;margin:0 auto 12px;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.35);width:' + largeur + 'px';
+      zone.appendChild(c);
+      await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    }
+  } catch (e) { zone.textContent = 'Le PDF n’a pas pu être affiché : utilisez « Télécharger ».'; }
 }
 
 /** L'outil de comparaison s'ouvre en plein écran par-dessus la fiche ; « Enregistrer sur la fiche » range le PDF chez ce client. */
@@ -2185,7 +2209,7 @@ function fenetreAppel(c, tache) {
     const prov = { ID: 'tmp' + Date.now(), ClientID: c.ID, Date: new Date().toISOString(), Type: 'Appel', 'Résultat': resultat, Auteur: S.moi, Texte: texte };
     S.d.activites.push(prov);
     enFond(appel('crmActivite', { clientId: c.ID, type: 'Appel', resultat, texte, auteur: S.moi }).then(r => {
-      S.d.activites = S.d.activites.filter(a => a.ID !== prov.ID); S.d.activites.push(r.activite);
+      S.d.activites = S.d.activites.filter(a => a.ID !== prov.ID); remplacer(S.d.activites, r.activite);
       const ici = client(c.ID); // le tag choisi ici reste celui de l'écran (il part par enregistrerChamps)
       if (r.client && ici) majClient(Object.assign(r.client, { Tag: ici.Tag, 'Catégorie': ici['Catégorie'], Devis: ici.Devis }));
       if (S.page === 'fiche') afficher();
@@ -2270,7 +2294,7 @@ function fenetreEmail(c, apresEnvoi, brouillon) {
     toast('Envoi en cours à ' + c.Email + '…');
     if (apresEnvoi) apresEnvoi();
     rpc('crmEnvoyerEmail', [{ clientId: c.ID, objet, corps, owner }]).then(r => {
-      S.d.activites.push(r.activite); S.d.envoisAujourdhui++; afficher(); toast('E-mail envoyé à ' + c.Email);
+      remplacer(S.d.activites, r.activite); S.d.envoisAujourdhui++; afficher(); toast('E-mail envoyé à ' + c.Email);
     }, e => {
       toast('E-mail NON envoyé : ' + e.message, true);
       fenetreEmail(c, null, { objet, corps, owner });

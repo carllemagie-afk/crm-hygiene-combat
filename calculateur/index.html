@@ -264,11 +264,43 @@
       const nom = 'Consommation ' + (salle || 'Hygiène & Combat').replace(/[^\wÀ-ÿ -]/g, '').trim() + '.pdf';
       urlPdf = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
       statut('PDF prêt. ' + (CRM_CLIENT ? '<button class="bouton" id="garder">Enregistrer sur la fiche</button> ' : '') +
-        '<a class="bouton leger" href="' + urlPdf + '" download="' + nom.replace(/"/g, '') + '">↓ Télécharger</a> <a href="' + urlPdf + '" target="_blank" rel="noopener">Ouvrir le PDF ↗</a>');
+        '<a class="bouton leger" href="' + urlPdf + '" download="' + nom.replace(/"/g, '') + '">↓ Télécharger</a> <button class="bouton leger" id="voir">Ouvrir le PDF</button>');
+      $('voir').onclick = () => voirPdf(urlPdf, nom);
       if (CRM_CLIENT) $('garder').onclick = () => garder(pdf, nom);
     } catch (e) { statut('Le PDF n’a pas pu être créé : ' + e.message, true); }
     b.disabled = false; b.textContent = 'Créer le PDF client';
   });
+
+  /** Visionneuse : le PDF s'affiche dans la page (pdf.js), sans téléchargement. */
+  async function voirPdf(url, nom) {
+    const v = document.createElement('div');
+    v.style.cssText = 'position:fixed;inset:0;z-index:99;background:rgba(15,20,24,.88);display:flex;flex-direction:column';
+    v.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1d282e;color:#fff;font-weight:600"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>' +
+      '<a style="color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,.4);border-radius:8px;padding:6px 10px">↓ Télécharger</a>' +
+      '<button type="button" class="bouton leger">Fermer</button></div><div style="flex:1;overflow:auto;padding:12px;text-align:center;color:#fff">Chargement…</div>';
+    v.querySelector('span').textContent = nom;
+    const a = v.querySelector('a'); a.href = url; a.download = nom;
+    document.body.appendChild(v);
+    const fermer = () => { v.remove(); document.removeEventListener('keydown', echap); };
+    const echap = e => { if (e.key === 'Escape') fermer(); };
+    document.addEventListener('keydown', echap);
+    v.querySelector('button').onclick = fermer;
+    const zone = v.lastElementChild;
+    try {
+      const pdfjs = await import('../comparateur/pdf.mjs');
+      pdfjs.GlobalWorkerOptions.workerSrc = '../comparateur/pdf.worker.mjs';
+      const pdf = await pdfjs.getDocument({ data: new Uint8Array(await (await fetch(url)).arrayBuffer()), isEvalSupported: false }).promise;
+      zone.textContent = '';
+      const largeur = Math.min(900, zone.clientWidth - 24);
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i), base = page.getViewport({ scale: 1 }), r = window.devicePixelRatio || 1;
+        const vp = page.getViewport({ scale: largeur / base.width * r }), c = document.createElement('canvas');
+        c.width = vp.width; c.height = vp.height; c.style.cssText = 'display:block;margin:0 auto 12px;background:#fff;width:' + largeur + 'px';
+        zone.appendChild(c);
+        await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+      }
+    } catch (e) { zone.textContent = 'Le PDF n’a pas pu être affiché : utilisez « Télécharger ».'; }
+  }
 
   /** Range le PDF sur la fiche du client (même mécanisme que l'outil comparaison). */
   async function garder(pdf, nom) {
