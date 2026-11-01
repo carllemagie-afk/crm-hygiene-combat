@@ -678,7 +678,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.01-2105';
+const VERSION_APP = '2026.11.01-2130';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1186,6 +1186,8 @@ function lancerCRM() {
       afficher();
       surveiller();
       verifierFraicheur(true);
+      proposerNotifications();
+      ouvrirSelonAdresse();
       resumeEmails();
       return;
     }
@@ -1204,6 +1206,8 @@ function ouvrirSession(r) {
   afficher();
   surveiller();
   resumeEmails();
+  proposerNotifications();
+  ouvrirSelonAdresse();
 }
 
 function sessionPerdue() {
@@ -1310,9 +1314,63 @@ function enregistrerServiceWorker() {
   const dejaControle = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js').then(reg => { S.sw = reg; setInterval(majApp, 30 * 60e3); }).catch(() => {});
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (dejaControle) nouvelleVersion(); });
+  navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.type === 'notif-ouvrir') ouvrirDepuisNotif(e.data.url); });
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); S.installation = e; if (S.page === 'reglages' && S.d) pageReglages(); });
 }
 const majApp = () => { if (S.sw) S.sw.update().catch(() => {}); };
+
+// =================================================================== Notifications sur le téléphone (Web Push)
+// Chaque appareil reçoit les notifications de la personne connectée : résumé du matin, rappels 1 h / 5 min avant un RDV,
+// RDV pris / déplacé / annulé en ligne, réponse d'un client, tâche avec rappel. Le service worker (sw.js) lit la session ici.
+const pushPossible = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const memoriserPourSw = () => memoire.ecrire('sw', S.jeton ? { jeton: S.jeton, api: API } : null);
+const b64VersOctets = b => Uint8Array.from(atob(b.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - b.length % 4) % 4)), c => c.charCodeAt(0));
+const surIPhoneHorsApp = () => /iPhone|iPad/.test(navigator.userAgent) && !(navigator.standalone || matchMedia('(display-mode: standalone)').matches);
+async function activerNotifications(silencieux) {
+  if (!pushPossible()) {
+    if (!silencieux) toast(surIPhoneHorsApp() ? 'Sur iPhone : ajoutez d’abord le CRM à l’écran d’accueil (Partager › Sur l’écran d’accueil), puis ouvrez-le depuis l’icône.' : 'Ce navigateur ne permet pas les notifications.', true);
+    return false;
+  }
+  const permission = silencieux ? Notification.permission : await Notification.requestPermission();
+  if (permission !== 'granted') { if (!silencieux) toast('Notifications refusées : autorisez-les dans les réglages du téléphone, puis réessayez.', true); return false; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let abo = await reg.pushManager.getSubscription();
+    if (!abo) { const { cle } = await appelDiscret('crmPushCle'); abo = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64VersOctets(cle) }); }
+    await memoriserPourSw();
+    await appelDiscret('crmPushAbonner', abo.toJSON());
+    if (!silencieux) { toast('Notifications activées sur cet appareil'); appelDiscret('crmPushTest').catch(() => {}); }
+    return true;
+  } catch (e) { if (!silencieux) toast('Activation impossible : ' + e.message, true); return false; }
+}
+/** À l'ouverture : réabonne en silence si c'est déjà autorisé, sinon propose une fois (« Plus tard » = dans 7 jours). */
+function proposerNotifications() {
+  if (!pushPossible() || !S.jeton) return;
+  memoriserPourSw();
+  if (Notification.permission === 'granted') return activerNotifications(true);
+  if (Notification.permission !== 'default' || Date.now() - Number(lire('notif_plus_tard', 0)) < 7 * 864e5 || $('#bandeauNotif')) return;
+  const b = document.createElement('div');
+  b.id = 'bandeauNotif';
+  b.className = 'bandeau-app';
+  b.innerHTML = '<span>🔔 Recevoir vos rendez-vous et rappels sur cet appareil ?</span><button class="btn mini principal">Activer</button><button class="btn mini">Plus tard</button>';
+  const [oui, non] = b.querySelectorAll('button');
+  oui.onclick = () => { b.remove(); activerNotifications(false); };
+  non.onclick = () => { b.remove(); garder('notif_plus_tard', String(Date.now())); };
+  document.body.appendChild(b);
+}
+/** CRM ouvert par une notification (application fermée) : …/?ouvrir=#fiche/ID */
+function ouvrirSelonAdresse() {
+  const ouvrir = new URLSearchParams(location.search).get('ouvrir');
+  if (!ouvrir) return;
+  history.replaceState(null, '', location.pathname);
+  ouvrirDepuisNotif(ouvrir);
+}
+/** Notification touchée : ouvrir la fiche, l'agenda ou les tâches. */
+function ouvrirDepuisNotif(url) {
+  const m = String(url || '').match(/^#(fiche|agenda|taches)(?:\/(.+))?$/);
+  if (!m || !S.d) return;
+  if (m[1] === 'fiche' && m[2] && client(m[2])) aller('fiche', m[2]); else aller(m[1] === 'fiche' ? 'clients' : m[1]);
+}
 function nouvelleVersion() {
   if (!document.querySelector('#couche .voile') && !saisieEnCours()) return location.reload();
   if ($('#bandeauMaj')) return;
@@ -1379,6 +1437,9 @@ function ecranNouveauMdp(message) {
 }
 
 function deconnecter() {
+  // Cet appareil ne reçoit plus les notifications de la personne qui se déconnecte
+  if (pushPossible()) navigator.serviceWorker.ready.then(r => r.pushManager.getSubscription()).then(a => { if (a) { appelDiscret('crmPushDesabonner', a.endpoint).catch(() => {}); a.unsubscribe(); } }).catch(() => {});
+  memoire.ecrire('sw', null);
   appelDiscret('crmDeconnexion', S.jeton).catch(() => {});
   garder('crm_session', '');
   memoire.ecrire('donnees', null);
@@ -2569,7 +2630,7 @@ function ligneTache(t, n, compact) {
     '<div class="corps"><b>' + esc(t.Titre) + '</b><div class="sous">' +
       (ech ? '<span class="' + (enRetard ? 'retard' : '') + '">' + esc(relatif(t['Échéance'])) + '</span>' : '<span>Sans date</span>') +
       (c && !compact ? '<a href="#" data-ouvrir="' + c.ID + '">' + esc(nomClient(c)) + '</a>' : '') +
-      (t.EventId ? '<span title="Rappel Google Agenda">🔔</span>' : '') + '</div>' +
+      (t.EventId ? '<span title="Rappel (notification)">🔔</span>' : '') + '</div>' +
       (t.Notes && !compact ? '<div class="sous" style="white-space:pre-wrap">' + esc(t.Notes) + '</div>' : '') + '</div>' +
     (appelTel && !t.Faite ? '<button class="btn mini" data-appeler="' + t.ID + '">' + ico('tel') + 'Appeler</button>' : '') +
     (compact ? '' : avatar(t.Owner || '?', 's')) +
@@ -2636,7 +2697,7 @@ function fenetreTache(t) {
     '<label class="champ"><span>Heure</span><input type="time" id="taHeure" value="' + heureLocale(ech) + '"></label></div>' +
     '<label class="champ"><span>Pour</span><select id="taOwner">' + S.d.owners.map(o => '<option' + ((t.Owner || S.moi) === o ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select></label>' +
     '<label class="champ"><span>Notes</span><textarea id="taNotes" style="min-height:70px">' + esc(t.Notes || '') + '</textarea></label>' +
-    '<label class="interrupteur"><input type="checkbox" id="taRappel"' + (t.ID && !t.EventId ? '' : ' checked') + '><i></i>Rappel Google Agenda (notification)</label>',
+    '<label class="interrupteur"><input type="checkbox" id="taRappel"' + (t.ID && !t.EventId ? '' : ' checked') + '><i></i>Rappel : notification sur le téléphone à l’heure de la tâche</label>',
     pied: (t.ID ? '<button class="btn danger gauche" id="taSuppr">' + ico('poubelle') + 'Supprimer</button>' : '') + '<button class="btn" data-fermer>Annuler</button><button class="btn principal" id="taOk">Enregistrer</button>' });
   f.el.querySelectorAll('#taType button').forEach(b => b.onclick = () => { type = b.dataset.t; f.el.querySelectorAll('#taType button').forEach(x => x.classList.toggle('actif', x === b)); });
   f.$('#taOk').onclick = () => {
@@ -3311,6 +3372,10 @@ function pageReglages() {
     '<div style="display:grid;gap:16px;max-width:760px">' +
     '<div class="carte"><div class="carte-tete"><h2>Mon compte</h2><button class="btn mini" id="rgSortir">' + ico('sortie') + 'Se déconnecter</button></div><div class="carte-corps">' +
       '<div class="rangee" style="margin-bottom:14px">' + avatar(S.moi, '') + '<div><b>' + esc(S.moi) + '</b><div class="doux petit">Connecté sur cet appareil</div></div></div>' +
+      '<div class="rangee" style="margin-bottom:14px;justify-content:space-between"><div style="flex:1;min-width:220px"><b>🔔 Notifications sur cet appareil</b><div class="doux petit">' +
+        (pushPossible() ? (Notification.permission === 'granted' ? 'Activées : rendez-vous, rappels 1 h et 5 min avant, réponses de clients, tâches.' : Notification.permission === 'denied' ? 'Refusées : autorisez-les dans les réglages du téléphone.' : 'Résumé du matin, rappels 1 h et 5 min avant chaque RDV, réponses de clients, tâches.')
+          : surIPhoneHorsApp() ? 'Sur iPhone : ajoutez d’abord le CRM à l’écran d’accueil, puis ouvrez-le depuis l’icône.' : 'Ce navigateur ne permet pas les notifications.') + '</div></div>' +
+        (pushPossible() && Notification.permission !== 'denied' ? '<button class="btn mini" id="rgNotif">' + (Notification.permission === 'granted' ? 'Envoyer un essai' : 'Activer') + '</button>' : '') + '</div>' +
       '<div class="grille-2"><label class="champ"><span>Mot de passe actuel</span><input type="password" id="rgMdp0" autocomplete="current-password"></label>' +
       '<label class="champ"><span>Nouveau mot de passe (8 caractères min.)</span><input type="password" id="rgMdp1" autocomplete="new-password"></label></div>' +
       '<div class="rangee" style="justify-content:space-between"><p class="pale petit" style="margin:0;flex:1;min-width:220px">Le nouveau mot de passe vaut pour tous vos appareils. Vous restez connecté sur celui-ci.</p>' +
@@ -3330,6 +3395,7 @@ function pageReglages() {
     carteQonto() +
     '<div class="carte"><div class="carte-tete"><h2>Données</h2></div><div class="carte-corps rangee"><a class="btn" href="' + esc(S.d.classeurUrl) + '" target="_blank">' + ico('export') + 'Ouvrir le Google Sheet</a>' +
       '<button class="btn" id="rgRecharger">' + ico('recharger') + 'Recharger les données</button></div></div></div></div>';
+  if ($('#rgNotif')) $('#rgNotif').onclick = () => (Notification.permission === 'granted' ? activerNotifications(true).then(() => appelDiscret('crmPushTest')).then(() => toast('Essai envoyé : la notification arrive dans quelques secondes')) : activerNotifications(false).then(() => pageReglages())).catch(e => toast(e.message, true));
   $('#rgSortir').onclick = deconnecter;
   brancherRdv();
   brancherQonto();
