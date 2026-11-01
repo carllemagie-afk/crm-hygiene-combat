@@ -676,7 +676,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.10.31-1853';
+const VERSION_APP = '2026.11.01-2028';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -707,6 +707,8 @@ function fenetreDevisQonto(c) {
     '<label class="champ"><span>Rue</span><input type="text" id="dqRue" value="' + esc(adr.rue) + '" placeholder="12 rue des Lilas"></label>' +
     '<div class="trois-champs" style="grid-template-columns:1fr 2fr"><label class="champ"><span>Code postal</span><input type="text" id="dqCp" inputmode="numeric" maxlength="5" value="' + esc(adr.cp) + '" placeholder="92000"></label>' +
       '<label class="champ"><span>Ville</span><input type="text" id="dqVille" value="' + esc(adr.ville) + '"></label></div>' +
+    '<label class="champ"><span>SIREN ou SIRET du client</span><input type="text" id="dqSiren" inputmode="numeric" value="' + esc(c.SIREN || '') + '" placeholder="9 chiffres (14 pour le SIRET)">' +
+      '<small><a href="https://annuaire-entreprises.data.gouv.fr/rechercher?terme=' + encodeURIComponent(c.Salle || '') + '" target="_blank" rel="noopener">Le trouver sur l’annuaire des entreprises</a></small></label>' +
     '<label class="interrupteur" style="margin:4px 0 12px"><input type="checkbox" id="dqEnv"' + (c.Email ? ' checked' : ' disabled') + '><i></i>Envoyer le devis par Qonto à ' + esc(c.Email || '(pas d’e-mail sur la fiche)') + '</label>' +
     '<div id="dqMail"><label class="champ"><span>Objet de l’e-mail</span><input type="text" id="dqO" value="Votre devis Hygiène &amp; Combat"></label>' +
       '<label class="champ"><span>Message</span><textarea id="dqM" style="min-height:150px">' + esc(corpsDefaut) + '</textarea></label></div>' +
@@ -726,8 +728,10 @@ function fenetreDevisQonto(c) {
   f.$('#dqOk').onclick = () => {
     const env = f.$('#dqEnv').checked;
     const rue = f.$('#dqRue').value.trim(), cp = f.$('#dqCp').value.replace(/\s/g, ''), ville = f.$('#dqVille').value.trim();
+    const siren = f.$('#dqSiren').value.replace(/\D/g, '');
+    if (!/^(\d{9}|\d{14})$/.test(siren)) { toast('Indiquez le SIREN (9 chiffres) ou le SIRET (14 chiffres) du client : Qonto en a besoin.', true); f.$('#dqSiren').focus(); return; }
     if (!rue || !ville || !/^\d{5}$/.test(cp)) { toast('Complétez la rue, le code postal (5 chiffres) et la ville : Qonto en a besoin.', true); (!rue ? f.$('#dqRue') : !/^\d{5}$/.test(cp) ? f.$('#dqCp') : f.$('#dqVille')).focus(); return; }
-    occupe(f.$('#dqOk'), appel('crmDevisQonto', { clientId: c.ID, bidons: n('#dqB'), prix: n('#dqP'), livraison: n('#dqL'), envoyer: env, rue, cp, ville,
+    occupe(f.$('#dqOk'), appel('crmDevisQonto', { clientId: c.ID, bidons: n('#dqB'), prix: n('#dqP'), livraison: n('#dqL'), envoyer: env, rue, cp, ville, siren,
       objet: f.$('#dqO').value.trim(), message: f.$('#dqM').value, owner: S.moi })).then(rep => {
       const i = S.d.clients.findIndex(x => x.ID === c.ID); if (i >= 0) S.d.clients[i] = rep.client;
       if (!S.d.activites.some(a => a.ID === rep.activite.ID)) S.d.activites.push(rep.activite);
@@ -812,7 +816,7 @@ const VUES_BASE = [
 ];
 const CHAMPS_SYSTEME = ['ID', 'Salle', 'Prénom', 'Nom', 'Email', 'Téléphone', 'Ville', 'Adresse', 'Discipline', 'Site web', 'Source',
   'Tag', 'Owner', 'Devis', 'Montant devis', 'Dernier appel', 'Dernier contact', 'Accroche', 'Notes', 'Séquence', 'Séquence nom', 'Créé le',
-  'Téléphone 2', 'Email 2', 'Date rachat', 'Rôle'];
+  'Téléphone 2', 'Email 2', 'Date rachat', 'Rôle', 'SIREN'];
 const ROLES = ['Gérant', 'Président', 'Fondateur', 'Coach', 'Responsable technique', 'Secrétaire', 'Trésorier', 'Directeur sportif'];
 const CHAMPS_DATE = ['Dernier appel', 'Dernier contact', 'Créé le', 'Date rachat'];
 const CHAMPS_NON_IMPORTABLES = ['ID', 'Créé le', 'Séquence', 'Séquence nom'];
@@ -1701,7 +1705,7 @@ function pageFiche() {
           '</div></div>' +
           '<div class="proprietes">' +
             section('Coordonnées', prop('Prénom') + prop('Nom') + prop('Rôle', 'role') + double('Email', 'Email 2', 'email', 'E-mail') + double('Téléphone', 'Téléphone 2', 'tel', 'Téléphone'), true) +
-            section('La salle', prop('Ville') + prop('Adresse') + prop('Discipline') + prop('Site web') + prop('Source'), true) +
+            section('La salle', prop('Ville') + prop('Adresse') + prop('Discipline') + prop('Site web') + prop('SIREN') + prop('Source'), true) +
             section('Devis', prop('Devis', 'select', d.devis) + prop('Montant devis'), true) +
             section('Prospection', prop('Accroche', 'textarea') + prop('Notes', 'textarea'), false) +
             section('Champs personnalisés', perso.map(k => prop(k)).join('') + '<button class="lien-ajout" id="ajoutChamp">' + ico('plus') + 'Ajouter un champ</button>', perso.length > 0) +
