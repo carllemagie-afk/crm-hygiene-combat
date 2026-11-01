@@ -67,6 +67,8 @@
   .fenetre h2 .logo-qonto { margin-right: 6px; } .btn .logo-qonto { width: 18px; height: 18px; font-size: 12px; }
   .trois-champs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   @media (max-width: 560px) { .trois-champs { grid-template-columns: 1fr 1fr; } }
+  .choix-qonto { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .choix-qonto .btn { justify-content: center; padding: 14px; font-size: 15px; }
   .total-devis { background: var(--acier-50); border-radius: 10px; padding: 10px 14px; margin: 2px 0 14px; font-size: 15px; }
   .recu { display: flex; gap: 14px; padding: 15px 18px; border-bottom: 1px solid var(--trait); align-items: flex-start; }
   .recu:last-child { border-bottom: 0; }
@@ -676,7 +678,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.01-2040';
+const VERSION_APP = '2026.11.01-2059';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -687,21 +689,44 @@ const QONTO_WEB = 'https://app.qonto.com/';
  * Devis Qonto depuis la fiche : bidons, prix, livraison (valeurs des Réglages), créé dans Qonto et envoyé au client par Qonto,
  * ou seulement créé. « Ouvrir Qonto » pour le faire à la main. La fiche passe en Qualified · « Qualified devis Qonto send ».
  */
-function fenetreDevisQonto(c) {
+/** Bouton Qonto de la fiche : devis tant qu'aucun n'est parti ; ensuite (ou client Won), le choix devis ou facture. */
+function choixQonto(c) {
+  const devisEnvoye = c.Devis === 'Envoyé' || S.d.activites.some(a => a.ClientID === c.ID && a['Résultat'] === 'Devis Qonto envoyé');
+  if (!devisEnvoye && c.Tag !== 'Won') return fenetreDevisQonto(c);
+  const f = fenetre({ titre: LOGO_QONTO + ' Qonto · ' + esc(nomClient(c)), corps:
+    '<p class="doux" style="margin-top:0">' + (c.Tag === 'Won' ? 'Nouvelle commande : envoyez directement la facture (un devis est créé dans Qonto sans être envoyé), ou d’abord un devis.' : 'Un devis a déjà été envoyé. Commande validée par le client ? Envoyez la facture.') + '</p>' +
+    '<div class="choix-qonto"><button class="btn" id="cqDevis">' + ico('note') + 'Devis</button><button class="btn principal" id="cqFacture">' + ico('envoyer') + 'Facture</button></div>' });
+  f.$('#cqDevis').onclick = () => { f.fermer(); fenetreDevisQonto(c); };
+  f.$('#cqFacture').onclick = () => { f.fermer(); fenetreDevisQonto(c, true); };
+}
+
+/** Contenu du dernier devis Qonto de la fiche (bidons, prix, livraison), pour préremplir la facture. */
+function dernierDevisQonto(c) {
+  const a = S.d.activites.filter(x => x.ClientID === c.ID && /^Devis Qonto/.test(x['Résultat'] || '')).sort((x, y) => String(y.Date).localeCompare(String(x.Date)))[0];
+  const m = a && String(a.Texte || '').match(/(\d+) bidon\(s\) × ([\d,]+) €(?: \+ livraison ([\d,]+) €)?/);
+  return m ? { bidons: m[1], prix: m[2].replace(',', '.'), livraison: (m[3] || '0').replace(',', '.') } : null;
+}
+
+function fenetreDevisQonto(c, facture) {
   const r = S.d.reglages, q = S.d.qonto || {};
   const owner = c.Owner || S.moi;
-  const corpsDefaut = 'Bonjour' + (c['Prénom'] ? ' ' + c['Prénom'] : '') + ',\n\nComme convenu, voici votre devis pour le désinfectant Hygiène & Combat.\n\nJe reste disponible pour toute question.\n\nBien à vous,\n' + String(owner || '').split(' ')[0];
+  const signature = '\n\nBien à vous,\n' + String(owner || '').split(' ')[0];
+  const corpsDefaut = 'Bonjour' + (c['Prénom'] ? ' ' + c['Prénom'] : '') + ',\n\n' + (facture
+    ? 'Merci pour votre commande ! Voici votre facture pour le désinfectant Hygiène & Combat. Le règlement se fait par virement : les coordonnées sont sur la facture.\n\nLa livraison part dès réception du paiement.'
+    : 'Comme convenu, voici votre devis pour le désinfectant Hygiène & Combat.\n\nJe reste disponible pour toute question.') + signature;
+  const base = (facture && dernierDevisQonto(c)) || { bidons: r.BIDONS_PAR_COMMANDE, prix: r.PRIX_BIDON_HT, livraison: r.LIVRAISON_CLIENT_HT };
+  const quoi = facture ? 'Facture' : 'Devis';
   const adresse = String(c.Adresse || '').trim();
   const adr = { rue: adresse.replace(/,?\s*\d{5}.*$/, '').trim(), cp: (adresse.match(/\b\d{5}\b/) || [])[0] || '', ville: c.Ville || (adresse.match(/\d{5}\s+([^,]+)/) || [])[1] || '' };
   if (!q.connecte) {
-    const f = fenetre({ titre: 'Devis Qonto', corps: '<p class="doux" style="margin-top:0">Qonto n’est pas encore connecté au CRM (Réglages > Banque · Qonto). En attendant, créez le devis directement dans Qonto.</p>',
+    const f = fenetre({ titre: quoi + ' Qonto', corps: '<p class="doux" style="margin-top:0">Qonto n’est pas encore connecté au CRM (Réglages > Banque · Qonto). En attendant, créez le devis directement dans Qonto.</p>',
       pied: '<button class="btn" data-fermer>Fermer</button><a class="btn principal" href="' + QONTO_WEB + '" target="_blank" rel="noopener">' + LOGO_QONTO + 'Ouvrir Qonto</a>' });
     return f;
   }
-  const f = fenetre({ titre: LOGO_QONTO + ' Devis Qonto · ' + esc(nomClient(c)), corps:
-    '<div class="trois-champs"><label class="champ"><span>Bidons de 5 L</span><input type="number" id="dqB" min="1" step="1" value="' + esc(r.BIDONS_PAR_COMMANDE) + '"></label>' +
-      '<label class="champ"><span>Prix d’un bidon (€ HT)</span><input type="number" id="dqP" min="0" step="0.01" value="' + esc(r.PRIX_BIDON_HT) + '"></label>' +
-      '<label class="champ"><span>Livraison (€ HT)</span><input type="number" id="dqL" min="0" step="0.01" value="' + esc(r.LIVRAISON_CLIENT_HT) + '"></label></div>' +
+  const f = fenetre({ titre: LOGO_QONTO + ' ' + quoi + ' Qonto · ' + esc(nomClient(c)), corps:
+    '<div class="trois-champs"><label class="champ"><span>Bidons de 5 L</span><input type="number" id="dqB" min="1" step="1" value="' + esc(base.bidons) + '"></label>' +
+      '<label class="champ"><span>Prix d’un bidon (€ HT)</span><input type="number" id="dqP" min="0" step="0.01" value="' + esc(base.prix) + '"></label>' +
+      '<label class="champ"><span>Livraison (€ HT)</span><input type="number" id="dqL" min="0" step="0.01" value="' + esc(base.livraison) + '"></label></div>' +
     '<div class="total-devis" id="dqTotal"></div>' +
     '<div class="etiquette" style="margin:0 0 6px">Adresse de facturation (obligatoire pour Qonto)</div>' +
     '<label class="champ"><span>Rue</span><input type="text" id="dqRue" value="' + esc(adr.rue) + '" placeholder="12 rue des Lilas"></label>' +
@@ -709,20 +734,21 @@ function fenetreDevisQonto(c) {
       '<label class="champ"><span>Ville</span><input type="text" id="dqVille" value="' + esc(adr.ville) + '"></label></div>' +
     '<label class="champ"><span>SIREN ou SIRET du client</span><input type="text" id="dqSiren" inputmode="numeric" value="' + esc(c.SIREN || '') + '" placeholder="9 chiffres (14 pour le SIRET)">' +
       '<small><a href="https://annuaire-entreprises.data.gouv.fr/rechercher?terme=' + encodeURIComponent(c.Salle || '') + '" target="_blank" rel="noopener">Le trouver sur l’annuaire des entreprises</a></small></label>' +
-    '<label class="interrupteur" style="margin:4px 0 12px"><input type="checkbox" id="dqEnv"' + (c.Email ? ' checked' : ' disabled') + '><i></i>Envoyer le devis par Qonto à ' + esc(c.Email || '(pas d’e-mail sur la fiche)') + '</label>' +
+    '<label class="interrupteur" style="margin:4px 0 12px' + (facture ? ';display:none' : '') + '"><input type="checkbox" id="dqEnv"' + (c.Email ? ' checked' : ' disabled') + '><i></i>Envoyer le devis par Qonto à ' + esc(c.Email || '(pas d’e-mail sur la fiche)') + '</label>' +
+    (facture ? '<p class="doux" style="margin:4px 0 12px">La facture est envoyée par Qonto à <b>' + esc(c.Email || '(pas d’e-mail sur la fiche)') + '</b>. La commande est créée « en cours », puis validée (et la fiche passe en Won) dès que Qonto voit la facture payée.</p>' : '') +
     '<label class="interrupteur" id="dqSeqL" style="margin:0 0 12px"><input type="checkbox" id="dqSeq"><i></i>Puis lancer la séquence « Devis envoyé » (relance J+3, appel devis J+5, dernière relance J+6, clôture J+8)</label>' +
-    '<div id="dqMail"><label class="champ"><span>Objet de l’e-mail</span><input type="text" id="dqO" value="Votre devis Hygiène &amp; Combat"></label>' +
+    '<div id="dqMail"><label class="champ"><span>Objet de l’e-mail</span><input type="text" id="dqO" value="Votre ' + (facture ? 'facture' : 'devis') + ' Hygiène &amp; Combat"></label>' +
       '<label class="champ"><span>Message</span><textarea id="dqM" style="min-height:150px">' + esc(corpsDefaut) + '</textarea></label></div>' +
-    '<p class="pale petit" style="margin:0">Le devis est créé dans Qonto (valable 30 jours, TVA ' + esc(r.TVA) + ' %). Le client Qonto est créé la première fois avec le nom de la salle, l’e-mail et l’adresse de la fiche.</p>',
+    '<p class="pale petit" style="margin:0">' + (facture ? 'Facture à 30 jours, rattachée au dernier devis (ou à un devis créé sans envoi), TVA ' + esc(r.TVA) + ' %.' : 'Le devis est créé dans Qonto (valable 30 jours, TVA ' + esc(r.TVA) + ' %).') + ' Le client Qonto est créé la première fois avec le nom de la salle, l’e-mail et l’adresse de la fiche.</p>',
     pied: '<a class="btn" href="' + QONTO_WEB + '" target="_blank" rel="noopener">Ouvrir Qonto</a><span class="espace" style="flex:1"></span><button class="btn" data-fermer>Annuler</button><button class="btn principal" id="dqOk"></button>' });
   const n = id => Number(String(f.$(id).value).replace(',', '.')) || 0;
   const maj = () => {
     const ht = n('#dqB') * n('#dqP') + n('#dqL'), ttc = ht * (1 + (Number(r.TVA) || 20) / 100);
     f.$('#dqTotal').innerHTML = 'Total <b>' + euros(ht, 2) + ' HT</b> · ' + euros(ttc, 2) + ' TTC';
-    const env = f.$('#dqEnv').checked;
+    const env = facture || f.$('#dqEnv').checked;
     f.$('#dqMail').style.display = env ? '' : 'none';
-    f.$('#dqSeqL').style.display = env ? '' : 'none';
-    f.$('#dqOk').textContent = env ? 'Créer et envoyer le devis' : 'Créer le devis dans Qonto';
+    f.$('#dqSeqL').style.display = env && !facture ? '' : 'none';
+    f.$('#dqOk').textContent = facture ? 'Créer et envoyer la facture' : env ? 'Créer et envoyer le devis' : 'Créer le devis dans Qonto';
   };
   ['#dqB', '#dqP', '#dqL'].forEach(id => f.$(id).oninput = maj);
   f.$('#dqEnv').onchange = maj;
@@ -733,6 +759,16 @@ function fenetreDevisQonto(c) {
     const siren = f.$('#dqSiren').value.replace(/\D/g, '');
     if (!/^(\d{9}|\d{14})$/.test(siren)) { toast('Indiquez le SIREN (9 chiffres) ou le SIRET (14 chiffres) du client : Qonto en a besoin.', true); f.$('#dqSiren').focus(); return; }
     if (!rue || !ville || !/^\d{5}$/.test(cp)) { toast('Complétez la rue, le code postal (5 chiffres) et la ville : Qonto en a besoin.', true); (!rue ? f.$('#dqRue') : !/^\d{5}$/.test(cp) ? f.$('#dqCp') : f.$('#dqVille')).focus(); return; }
+    if (facture) {
+      return occupe(f.$('#dqOk'), appel('crmFactureQonto', { clientId: c.ID, bidons: n('#dqB'), prix: n('#dqP'), livraison: n('#dqL'), rue, cp, ville, siren,
+        objet: f.$('#dqO').value.trim(), message: f.$('#dqM').value, owner: S.moi })).then(rep => {
+        S.d = rep.data;
+        f.fermer();
+        afficher();
+        if (rep.erreurEnvoi) toast('Facture ' + rep.numero + ' créée, mais pas envoyée : ' + rep.erreurEnvoi, true);
+        else toast('Facture ' + rep.numero + ' envoyée par Qonto à ' + c.Email + ' · commande en cours');
+      });
+    }
     occupe(f.$('#dqOk'), appel('crmDevisQonto', { clientId: c.ID, bidons: n('#dqB'), prix: n('#dqP'), livraison: n('#dqL'), envoyer: env, sequence: env && f.$('#dqSeq').checked, rue, cp, ville, siren,
       objet: f.$('#dqO').value.trim(), message: f.$('#dqM').value, owner: S.moi })).then(rep => {
       if (rep.data) S.d = rep.data;
@@ -1759,7 +1795,7 @@ function pageFiche() {
   $('#aRdv').onclick = () => fenetreRdv(c);
   $('#aComp').onclick = () => ouvrirComparateur(c);
   $('#aCalc').onclick = () => ouvrirCalculateur(c);
-  $('#aQonto').onclick = () => fenetreDevisQonto(c);
+  $('#aQonto').onclick = () => choixQonto(c);
   brancherBandeauTache(c);
   brancherComparatifs(c);
   $('#ajoutChamp').onclick = () => demanderTexte('Nouveau champ', 'Nom du champ (visible sur toutes les fiches)', 'Ex. : Nombre d’adhérents').then(nom =>
