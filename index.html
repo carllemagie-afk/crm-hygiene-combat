@@ -678,7 +678,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.01-2130';
+const VERSION_APP = '2026.11.02-2301';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1360,16 +1360,22 @@ function proposerNotifications() {
 }
 /** CRM ouvert par une notification (application fermée) : …/?ouvrir=#fiche/ID */
 function ouvrirSelonAdresse() {
-  const ouvrir = new URLSearchParams(location.search).get('ouvrir');
+  // ?fiche=ID : lien « Fiche CRM » des contacts du téléphone ; ?ouvrir=#… : notification ; #fiche/ID : ancien lien dont l'iPhone a décodé le %23.
+  const p = new URLSearchParams(location.search), h = decodeURIComponent(location.hash).match(/^#(fiche|agenda|taches)(?:\/(.+))?$/);
+  const ouvrir = p.get('fiche') ? '#fiche/' + p.get('fiche') : p.get('ouvrir') || (h ? h[0] : '');
   if (!ouvrir) return;
   history.replaceState(null, '', location.pathname);
   ouvrirDepuisNotif(ouvrir);
 }
 /** Notification touchée : ouvrir la fiche, l'agenda ou les tâches. */
-function ouvrirDepuisNotif(url) {
+function ouvrirDepuisNotif(url, essai) {
   const m = String(url || '').match(/^#(fiche|agenda|taches)(?:\/(.+))?$/);
   if (!m || !S.d) return;
-  if (m[1] === 'fiche' && m[2] && client(m[2])) aller('fiche', m[2]); else aller(m[1] === 'fiche' ? 'clients' : m[1]);
+  const id = m[2] ? decodeURIComponent(m[2]) : '';
+  if (m[1] === 'fiche' && id && client(id)) return aller('fiche', id);
+  // Fiche pas encore dans les données de l'appareil : on réessaie quand les données à jour arrivent (jusqu'à 15 s).
+  if (m[1] === 'fiche' && id && (essai || 0) < 10) return setTimeout(() => ouvrirDepuisNotif(url, (essai || 0) + 1), 1500);
+  aller(m[1] === 'fiche' ? 'clients' : m[1]);
 }
 function nouvelleVersion() {
   if (!document.querySelector('#couche .voile') && !saisieEnCours()) return location.reload();
@@ -1561,10 +1567,22 @@ function correspond(c, f, q) {
   if (f.ville && !String(c.Ville || '').toLowerCase().includes(f.ville.toLowerCase())) return false;
   if (f.discipline && !String(c.Discipline || '').toLowerCase().includes(f.discipline.toLowerCase())) return false;
   if (q) {
+    // Numéro de téléphone, quel que soit son format (« 06 12 34 56 78 », « +33 6… », « 0612… », les 4 derniers chiffres…).
+    const num = q.replace(/[\s.\-()]/g, '');
+    if (/^\+?\d{3,}$/.test(num)) {
+      const n = num.replace(/^(\+33|0033)/, '').replace(/^0/, '');
+      return [c['Téléphone'], c['Téléphone 2']].some(t => chiffresTel(t).includes(n));
+    }
     const texte = ['Salle', 'Prénom', 'Nom', 'Email', 'Email 2', 'Téléphone', 'Téléphone 2', 'Ville', 'Discipline', 'Notes'].map(k => c[k]).join(' ').toLowerCase();
     if (!q.toLowerCase().split(/\s+/).every(m => texte.includes(m))) return false;
   }
   return true;
+}
+/** Chiffres d'un numéro, avec le 0 de tête (le Sheet l'enlève ; +33 et 0033 deviennent 0). */
+function chiffresTel(t) {
+  let n = String(t || '').replace(/\D/g, '');
+  if (/^33\d{9}$/.test(n)) n = '0' + n.slice(2); else if (/^0033\d{9}$/.test(n)) n = '0' + n.slice(4); else if (/^[1-9]\d{8}$/.test(n)) n = '0' + n;
+  return n;
 }
 const clientsFiltres = () => S.d.clients.filter(c => correspond(c, filtresCourants(), S.recherche))
   .sort((a, b) => String(b['Créé le']).localeCompare(String(a['Créé le'])));
