@@ -15,7 +15,8 @@
   window.RDV_PRECHARGE = (function () {
     try {
       var q = new URLSearchParams(location.search);
-      var id = (q.get('p') || (location.pathname.split('/rdv/')[1] || '').split('/')[0] || '').toLowerCase();
+      var id = (q.get('p') || location.pathname.replace(/index\.html$/, '').split('/').filter(Boolean).pop() || '').toLowerCase();
+      if (id === 'rdv' || id === 'crm-hygiene-combat') id = '';
       if (!id || id === 'gerer') return null;
       var cle = q.get('c') || '';
       try { if (cle) localStorage.setItem('hc_rdv_c', cle); else cle = localStorage.getItem('hc_rdv_c') || ''; } catch (e) { /* navigation privée */ }
@@ -27,8 +28,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <!--
-  Page publique de prise de rendez-vous (GitHub Pages) : …/rdv/ (choix), …/rdv/carl/, …/rdv/matthieu/ (?c=clé : client reconnu,
-  lien envoyé dans ses e-mails), …/rdv/gerer/#jeton (annuler / déplacer). Construite par build.py (https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec, https://carllemagie-afk.github.io/crm-hygiene-combat/).
+  Page publique de prise de rendez-vous (GitHub Pages) : https://rendez-vous.hygiene-combat.fr/ (choix), …/carl/, …/matthieu/
+  (?c=clé : client reconnu, lien envoyé dans ses e-mails), …/gerer/#jeton (annuler / déplacer). Mêmes pages, ancienne adresse,
+  sous …/crm-hygiene-combat/rdv/ (liens déjà envoyés). Construite par build.py (https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec, https://carllemagie-afk.github.io/crm-hygiene-combat/, https://carllemagie-afk.github.io/crm-hygiene-combat/rdv/ : adresse de ces pages).
+  Page déjà vue sur cet appareil : affichée tout de suite avec les créneaux gardés, puis remplacée par les créneaux à jour.
   Un seul appel au chargement (rdvPublicPage : la personne, tous les créneaux libres, le client) : changer de semaine est instantané.
   Appels : fonctions rdvPublic… de l'API, sans connexion.
 -->
@@ -123,8 +126,8 @@
   const API = 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec';
   const BASE = 'https://carllemagie-afk.github.io/crm-hygiene-combat/rdv/';
   const q = new URLSearchParams(location.search);
-  const ID = (q.get('p') || (location.pathname.split('/rdv/')[1] || '').split('/')[0] || '').toLowerCase();
   const PRE = window.RDV_PRECHARGE;
+  const ID = (PRE && PRE.id) || (q.get('p') || location.pathname.replace(/index\.html$/, '').split('/').filter(Boolean).pop() || '').toLowerCase().replace(/^(rdv|crm-hygiene-combat)$/, '');
   const CLE = q.get('c') || (PRE && PRE.cle) || '';
   const memoire = { lire: k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }, ecrire: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* rien */ } } };
   const $ = s => document.querySelector(s);
@@ -334,16 +337,35 @@
   // ------------------------------------------------------------------ Démarrage
   if (ID === 'gerer') pageGerer(decodeURIComponent(location.hash.slice(1)));
   else if (!ID) pageChoix();
-  else (PRE && PRE.id === ID && PRE.cle === CLE
+  else {
+    // Page déjà ouverte sur cet appareil (moins de 6 h) : affichée tout de suite, créneaux passés retirés. La réservation
+    // revérifie toujours l'agenda ; les créneaux à jour remplacent ceux-ci dès leur arrivée, sauf si un créneau est déjà choisi.
+    const CLE_GARDE = 'hc_rdv_page_' + ID;
+    let dejaAffiche = false;
+    try {
+      const g = JSON.parse(memoire.lire(CLE_GARDE) || 'null');
+      if (g && g.cle === CLE && Date.now() - g.t < 6 * 3600e3 && g.data && g.data.profil) {
+        const tot = Date.now() + 15 * 60e3;
+        g.data.jours = (g.data.jours || []).map(j => ({ jour: j.jour, creneaux: j.creneaux.filter(t => t > tot) })).filter(j => j.creneaux.length);
+        document.title = 'Rendez-vous avec ' + g.data.profil.prenom + ' – Hygiène & Combat';
+        pageReserver(g.data);
+        dejaAffiche = true;
+      }
+    } catch (e) { /* page gardée illisible : on attend le serveur */ }
+    (PRE && PRE.id === ID && PRE.cle === CLE
     ? PRE.reponse.then(x => { if (!x.ok) throw new Error(x.erreur || 'Erreur inconnue'); return x.r; }, () => api('rdvPublicPage', { intervenant: ID, client: CLE }))
     : api('rdvPublicPage', { intervenant: ID, client: CLE })).then(data => {
     document.title = 'Rendez-vous avec ' + data.profil.prenom + ' – Hygiène & Combat';
     if (data.cleInvalide && !q.get('c')) memoire.ecrire('hc_rdv_c', ''); // clé gardée par le navigateur, plus valable
+    try { memoire.ecrire(CLE_GARDE, JSON.stringify({ t: Date.now(), cle: CLE, data })); } catch (e) { /* plein */ }
+    if (dejaAffiche && ($('#barre').classList.contains('visible') || !$('#sel'))) return; // créneau choisi ou réservé : on ne change pas l'écran
     pageReserver(data);
   }, e => {
+    if (dejaAffiche) return; // créneaux gardés déjà affichés : la réservation dira s'il y a un souci
     $('#app').innerHTML = '<div class="carte"><h1>Page indisponible</h1><div class="message erreur">' + esc(e.message) + '</div>' +
       '<div class="actions"><a class="btn second" href="' + esc(BASE) + '">Voir les personnes disponibles</a></div></div>';
   });
+  }
 })();
 </script>
 </body>

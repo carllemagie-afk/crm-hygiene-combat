@@ -5,9 +5,10 @@
 <title>Page introuvable – Hygiène &amp; Combat</title>
 <body style="font-family:system-ui,sans-serif;padding:40px 20px;text-align:center;color:#1d282e">
 <script>
-  // …/rdv/quelquun/ (personne ajoutée après la construction de l'application) : page de rendez-vous générique
-  const m = location.pathname.match(/\/rdv\/([a-z0-9-]+)\/?$/i);
-  if (m) location.replace('https://carllemagie-afk.github.io/crm-hygiene-combat/rdv/?p=' + encodeURIComponent(m[1].toLowerCase()) + location.hash);
+  // …/quelquun/ (personne ajoutée après la construction des pages) : page de rendez-vous générique
+  const base = new URL('https://carllemagie-afk.github.io/crm-hygiene-combat/rdv/').pathname;
+  const m = location.pathname.startsWith(base) && location.pathname.slice(base.length).match(/^([a-z0-9-]+)\/?$/i);
+  if (m) location.replace('https://carllemagie-afk.github.io/crm-hygiene-combat/rdv/?p=' + encodeURIComponent(m[1].toLowerCase()) + location.search.replace(/^\?/, '&') + location.hash);
 </script>
 <h1 style="font-size:20px">Page introuvable</h1>
 <p><a href="https://carllemagie-afk.github.io/crm-hygiene-combat/rdv/">Prendre rendez-vous avec Hygiène &amp; Combat</a></p>
