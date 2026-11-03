@@ -678,7 +678,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.02-2301';
+const VERSION_APP = '2026.11.03-2357';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -905,7 +905,7 @@ function signatureHtml(p, lienRdv, marque) {
   const rond = (contenu, l, classe) => '<td class="' + classe + '" width="' + l + '" valign="middle" style="width:' + l + 'px;">' + contenu + '</td>';
   // Téléphone (Gmail, Apple Mail) : cercles et logo plus petits, pour que la signature tienne dans la largeur de l'écran.
   const styleTelephone = '<style>@media screen and (max-width:480px){.hc-case{width:72px!important}.hc-photo{width:72px!important;height:72px!important;border-radius:36px!important;line-height:72px!important;font-size:26px!important}' +
-    '.hc-casel{width:80px!important}.hc-logo{width:80px!important;height:69px!important}.hc-texte{padding:0 10px!important}.hc-nom{font-size:16px!important;line-height:21px!important}' +
+    '.hc-casel{width:80px!important}.hc-logo{width:80px!important;height:69px!important}.hc-texte{padding:0 8px!important}.hc-nom{font-size:16px!important;line-height:21px!important}' +
     '.hc-petit{font-size:13px!important;line-height:19px!important}}</style>';
   const photo = p.photo
     ? '<img src="' + e(p.photo) + '" class="hc-photo" width="108" height="108" alt="' + e(p.nom) + '" style="display:block;border:0;width:108px;height:108px;border-radius:54px;">'
@@ -915,9 +915,13 @@ function signatureHtml(p, lienRdv, marque) {
   const logo = '<img src="' + ADRESSE_IMAGES + 'signature-logo-plaque.png" class="hc-logo" width="137" height="118" alt="Hygiène &amp; Combat" style="display:block;border:0;width:137px;height:118px;">';
   const ligne = (icone, texte, lien) => '<tr><td class="hc-petit" style="' + police + 'font-size:15px;line-height:24px;font-weight:bold;color:#1a1a1a;padding-top:6px;white-space:nowrap;">' + icone + '&nbsp;' +
     '<a href="' + e(lien) + '" style="color:#1a1a1a;text-decoration:none;">' + e(texte) + '</a></td></tr>';
-  const bouton = (lien, texte, fond, couleur) => '<a href="' + e(lien) + '" style="display:block;' + police + 'font-size:15px;line-height:20px;font-weight:bold;color:' + couleur +
-    ';background-color:' + fond + ';text-decoration:none;text-align:center;padding:9px 12px;border-radius:6px;">' + texte + '</a>';
-  return styleTelephone + '<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;width:100%;max-width:600px;margin-top:18px;">' +
+  // Bouton « plein » : la couleur est sur une case de tableau de largeur 100 % (et non sur le lien), pour que chaque bouton prenne
+  // toute sa moitié de largeur même quand l'application de messagerie ignore display:block (iPhone, Gmail, Outlook).
+  const bouton = (lien, texte, fond, couleur) => '<table cellpadding="0" cellspacing="0" border="0" role="presentation" width="100%" style="border-collapse:separate;width:100%;"><tr>' +
+    '<td align="center" bgcolor="' + fond + '" style="background-color:' + fond + ';border-radius:6px;text-align:center;padding:11px 6px;">' +
+    '<a href="' + e(lien) + '" style="display:block;' + police + 'font-size:15px;line-height:20px;font-weight:bold;color:' + couleur +
+    ';text-decoration:none;text-align:center;white-space:nowrap;">' + texte + '</a></td></tr></table>';
+  return styleTelephone + '<table cellpadding="0" cellspacing="0" border="0" role="presentation" width="100%" style="border-collapse:collapse;width:100%;max-width:600px;margin-top:18px;">' +
     '<tr><td style="padding:0 0 18px 0;"><table cellpadding="0" cellspacing="0" border="0" role="presentation" align="center" style="border-collapse:collapse;margin:0 auto;"><tr>' +
       rond(photo, 108, 'hc-case') +
       '<td class="hc-texte" valign="middle" style="padding:0 22px;"><table cellpadding="0" cellspacing="0" border="0" role="presentation">' +
@@ -931,8 +935,8 @@ function signatureHtml(p, lienRdv, marque) {
       rond(logo, 137, 'hc-casel') +
     '</tr></table></td></tr>' +
     '<tr><td style="border-top:1px solid #212024;padding-top:16px;"><table cellpadding="0" cellspacing="0" border="0" role="presentation" width="100%" style="border-collapse:collapse;"><tr>' +
-      '<td width="50%" style="padding-right:6px;">' + (tel ? bouton('tel:' + tel, '📱 Appeler', '#5c8edc', '#ffffff') : '') + '</td>' +
-      '<td width="50%" style="padding-left:6px;">' + bouton(lienRendezVous(lienRdv), '📅 Rendez-vous', '#e1dcfb', '#212024') + '</td>' +
+      '<td width="50%" valign="middle" style="width:50%;padding-right:6px;">' + (tel ? bouton('tel:' + tel, '📱 Appeler', '#5c8edc', '#ffffff') : '') + '</td>' +
+      '<td width="50%" valign="middle" style="width:50%;padding-left:6px;">' + bouton(lienRendezVous(lienRdv), '📅 Rendez-vous', '#e1dcfb', '#212024') + '</td>' +
     '</tr></table></td></tr>' +
     '</table>';
 }
