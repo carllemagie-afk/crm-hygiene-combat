@@ -715,7 +715,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.07-1630';
+const VERSION_APP = '2026.11.07-1633';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1062,6 +1062,9 @@ function ilYa(iso) {
   if (j <= 0) return "aujourd'hui";
   return j === 1 ? 'hier' : 'il y a ' + j + ' j';
 }
+/** Tâche « dans la journée » : échéance à 00:00 (aucune heure précise, pas de rappel à l'heure). */
+const sansHeure = iso => { if (!iso) return false; const d = new Date(iso); return d.getHours() === 0 && d.getMinutes() === 0; };
+const echeanceTexte = iso => sansHeure(iso) ? relatif(iso).replace(/,? ?00:00$/, '').trim() + ' · dans la journée' : relatif(iso);
 function relatif(iso) {
   if (!iso) return '';
   const d = new Date(iso), maintenant = new Date();
@@ -2784,12 +2787,12 @@ function fenetreSequence(ids) {
 function ligneTache(t, n, compact) {
   const c = client(t.ClientID);
   const ech = t['Échéance'] ? new Date(t['Échéance']) : null;
-  const enRetard = ech && !t.Faite && ech < new Date();
+  const enRetard = ech && !t.Faite && (sansHeure(t['Échéance']) ? ech < debutJour(new Date()) : ech < new Date());
   const appelTel = t.Type === 'Appel' && c && telNettoye(c['Téléphone']);
   return '<div class="tache' + (t.Faite ? ' faite' : '') + '"' + (c ? ' data-tache-ouvrir="' + t.ID + '" title="Ouvrir la fiche de ' + esc(nomClient(c)) + '"' : '') + ' style="--n:' + Math.min(n || 0, 25) + '"><input type="checkbox" class="case ronde" data-faite="' + t.ID + '"' + (t.Faite ? ' checked' : '') + ' aria-label="Terminée">' +
     '<span class="type">' + ico(t.Type === 'Appel' ? 'tel' : 'tache') + '</span>' +
     '<div class="corps"><b>' + esc(t.Titre) + '</b><div class="sous">' +
-      (ech ? '<span class="' + (enRetard ? 'retard' : '') + '">' + esc(relatif(t['Échéance'])) + '</span>' : '<span>Sans date</span>') +
+      (ech ? '<span class="' + (enRetard ? 'retard' : '') + '">' + esc(echeanceTexte(t['Échéance'])) + '</span>' : '<span>Sans date</span>') +
       (c && !compact ? '<a href="#" data-ouvrir="' + c.ID + '">' + esc(nomClient(c)) + '</a>' : '') +
       (t.EventId ? '<span title="Rappel (notification)">🔔</span>' : '') + '</div>' +
       (t.Notes && !compact ? '<div class="sous" style="white-space:pre-wrap">' + esc(t.Notes) + '</div>' : '') + '</div>' +
@@ -2850,22 +2853,30 @@ function fenetreTache(t) {
   t = t || {};
   const ech = t['Échéance'] ? new Date(t['Échéance']) : new Date(Date.now() + 3600e3);
   let type = t.Type || 'Appel';
+  let journee = !!t['Échéance'] && sansHeure(t['Échéance']); // « dans la journée » : pas d'heure précise
   const f = fenetre({ titre: t.ID ? 'Modifier la tâche' : 'Nouvelle tâche', corps:
     '<div class="segment" id="taType" style="margin-bottom:14px">' + ['Appel', 'Tâche'].map(x => '<button data-t="' + x + '" class="' + (type === x ? 'actif' : '') + '">' + ico(x === 'Appel' ? 'tel' : 'tache') + ' ' + x + '</button>').join('') + '</div>' +
     '<label class="champ"><span>Quoi ?</span><input type="text" id="taTitre" value="' + esc(t.Titre || '') + '" placeholder="Ex. : Rappeler pour le devis"></label>' +
     '<label class="champ"><span>Client</span>' + selectClient(t.ClientID, 'taClient') + '</label>' +
+    '<div class="segment" id="taQuand" style="margin-bottom:12px"><button data-j="0" class="' + (journee ? '' : 'actif') + '">À une heure précise</button><button data-j="1" class="' + (journee ? 'actif' : '') + '">Dans la journée</button></div>' +
     '<div class="grille-2"><label class="champ"><span>Date</span><input type="date" id="taDate" value="' + dateLocale(ech) + '"></label>' +
-    '<label class="champ"><span>Heure</span><input type="time" id="taHeure" value="' + heureLocale(ech) + '"></label></div>' +
+    '<label class="champ" id="taZoneHeure"' + (journee ? ' hidden' : '') + '><span>Heure</span><input type="time" id="taHeure" value="' + (journee ? '10:00' : heureLocale(ech)) + '"></label></div>' +
+    '<p class="doux petit" id="taAideJournee" style="margin:-4px 0 12px"' + (journee ? '' : ' hidden') + '>Pas d’heure : la tâche est dans votre notification de 9 h avec tous les appels du jour.</p>' +
     '<label class="champ"><span>Pour</span><select id="taOwner">' + S.d.owners.map(o => '<option' + ((t.Owner || S.moi) === o ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select></label>' +
     '<label class="champ"><span>Notes</span><textarea id="taNotes" style="min-height:70px">' + esc(t.Notes || '') + '</textarea></label>' +
-    '<label class="interrupteur"><input type="checkbox" id="taRappel"' + (t.ID && !t.EventId ? '' : ' checked') + '><i></i>Rappel : notification sur le téléphone à l’heure de la tâche</label>',
+    '<label class="interrupteur" id="taZoneRappel"' + (journee ? ' hidden' : '') + '><input type="checkbox" id="taRappel"' + (t.ID && !t.EventId ? '' : ' checked') + '><i></i>Rappel : notification sur le téléphone à l’heure de la tâche</label>',
     pied: (t.ID ? '<button class="btn danger gauche" id="taSuppr">' + ico('poubelle') + 'Supprimer</button>' : '') + '<button class="btn" data-fermer>Annuler</button><button class="btn principal" id="taOk">Enregistrer</button>' });
   f.el.querySelectorAll('#taType button').forEach(b => b.onclick = () => { type = b.dataset.t; f.el.querySelectorAll('#taType button').forEach(x => x.classList.toggle('actif', x === b)); });
+  f.el.querySelectorAll('#taQuand button').forEach(b => b.onclick = () => {
+    journee = b.dataset.j === '1';
+    f.el.querySelectorAll('#taQuand button').forEach(x => x.classList.toggle('actif', x === b));
+    f.$('#taZoneHeure').hidden = journee; f.$('#taZoneRappel').hidden = journee; f.$('#taAideJournee').hidden = !journee;
+  });
   f.$('#taOk').onclick = () => {
     const titre = f.$('#taTitre').value.trim();
     if (!titre) return toast('Indiquez la tâche', true);
     const donnees = { ID: t.ID, clientId: f.$('#taClient').value, type, titre, notes: f.$('#taNotes').value.trim(),
-      echeance: versIso(f.$('#taDate').value, f.$('#taHeure').value), owner: f.$('#taOwner').value, rappel: f.$('#taRappel').checked };
+      echeance: versIso(f.$('#taDate').value, journee ? '00:00' : f.$('#taHeure').value), owner: f.$('#taOwner').value, rappel: !journee && f.$('#taRappel').checked };
     // instantané : la tâche apparaît (ou change) tout de suite ; le rappel Google Agenda est créé en arrière-plan
     const prov = Object.assign({}, t, { ID: t.ID || 'tmp' + Date.now(), ClientID: donnees.clientId, Type: type, Titre: titre, Notes: donnees.notes,
       'Échéance': donnees.echeance, Owner: donnees.owner, Faite: !!t.Faite });
