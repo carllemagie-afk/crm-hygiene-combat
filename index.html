@@ -535,6 +535,19 @@
   .connexion form { width: 100%; max-width: 380px; padding: 30px 26px 26px; animation: apparait var(--doucement) both; }
   .connexion .logo { width: 38px; height: 38px; fill: none; stroke: var(--ardoise-800); stroke-width: 1.4; }
   .connexion .logo-crm { width: 64px; height: 64px; display: block; }
+  /* Bandeau d'appel : reste en haut tant que le tag de l'appel n'est pas validé (fenetreAppel / bandeauAppel). */
+  .bandeau-appel { position: fixed; z-index: 55; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 10px;
+    padding: calc(8px + env(safe-area-inset-top)) 12px 8px; background: var(--ardoise-900); color: #fff; box-shadow: var(--ombre-l); font-size: 14px; }
+  .bandeau-appel .ba-ico { display: flex; color: var(--acier); }
+  .bandeau-appel .ba-ico svg { width: 18px; height: 18px; }
+  .bandeau-appel .ba-nom { flex: 1; min-width: 0; color: #fff; text-decoration: none; display: flex; flex-direction: column; line-height: 1.25; }
+  .bandeau-appel .ba-nom b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bandeau-appel .ba-nom span { font-size: 12px; opacity: .7; }
+  .bandeau-appel select { width: auto; max-width: 130px; padding: 6px 8px; font-size: 14px; font-weight: 600; border-radius: 8px; color: #1d282e; background: #fff; border: 0; -webkit-appearance: menulist; appearance: menulist; }
+  .bandeau-appel .btn { flex: none; }
+  body.avec-appel .app { padding-top: var(--h-appel, 56px); }
+  body.avec-appel .barre-mobile, body.avec-appel .nav { top: var(--h-appel, 56px); }
+  body.avec-appel .nav { height: calc(100vh - var(--h-appel, 56px)); }
   .bandeau-app { position: fixed; z-index: 85; left: 50%; transform: translateX(-50%); top: calc(10px + env(safe-area-inset-top)); display: flex; align-items: center; gap: 10px;
     background: var(--ardoise-900); color: #fff; padding: 8px 8px 8px 14px; border-radius: 12px; box-shadow: var(--ombre-l); font-size: 13.5px; }
   .bandeau-app .btn { background: var(--acier); color: var(--ardoise-900); border: 0; }
@@ -678,7 +691,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.07-1440';
+const VERSION_APP = '2026.11.07-1449';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1193,6 +1206,7 @@ function lancerCRM() {
       afficher();
       surveiller();
       verifierFraicheur(true);
+      reprendreAppel();
       proposerNotifications();
       ouvrirSelonAdresse();
       resumeEmails();
@@ -1214,6 +1228,7 @@ function ouvrirSession(r) {
   surveiller();
   resumeEmails();
   proposerNotifications();
+  reprendreAppel();
   ouvrirSelonAdresse();
 }
 
@@ -2226,95 +2241,105 @@ function carteAVenir(c) {
 // =================================================================== Appel, note
 const dureeTexte = s => s < 60 ? s + ' s' : Math.floor(s / 60) + ' min ' + String(s % 60).padStart(2, '0');
 
+/**
+ * Appel : le numéro est composé tout de suite, sans fenêtre. Un petit bandeau reste en haut de l'écran (même après
+ * rechargement) jusqu'à ce que le tag soit validé ; on navigue librement dans le CRM pendant l'appel.
+ * Durée mesurée sans service payant : temps passé hors de l'app (iPhone) ou hors de la fenêtre (Mac, appel via l'iPhone).
+ * Tag proposé : appel de 20 s ou plus (joint) → Qualifying, sauf fiche déjà Qualified / Won ; appel court → tag actuel.
+ */
 function fenetreAppel(c, tache) {
   const tel = telNettoye(c['Téléphone']), tel2 = telNettoye(c['Téléphone 2']);
-  const f = fenetre({ titre: 'Appel · ' + esc(nomClient(c)), corps:
-    (tel ? '<a class="btn principal" data-composer href="tel:' + esc(tel) + '" style="width:100%;padding:12px;margin-bottom:' + (tel2 ? 8 : 16) + 'px">' + ico('tel') + 'Composer le ' + esc(telAffiche(c['Téléphone'])) + '</a>'
-      : '<p class="doux" style="margin-top:0">Pas de numéro sur la fiche.</p>') +
-    (tel2 ? '<a class="btn" data-composer href="tel:' + esc(tel2) + '" style="width:100%;margin-bottom:16px">' + ico('tel') + '2e numéro : ' + esc(telAffiche(c['Téléphone 2'])) + '</a>' : '') +
-    '<div class="piece-jointe" id="apDuree" hidden>' + ico('horloge') + '<span></span></div>' +
-    '<div class="champ"><span class="doux petit" style="display:block;margin-bottom:6px">Résultat</span><div class="segment" id="apRes">' +
-      ['Joint', 'Pas de réponse', 'Messagerie', 'Mauvais numéro'].map((r, i) => '<button data-r="' + r + '" class="' + (i === 0 ? 'actif' : '') + '">' + r + '</button>').join('') + '</div></div>' +
-    '<label class="champ"><span>Compte rendu</span><textarea id="apTxt" placeholder="Ce qui s’est dit, besoins, objections…"></textarea></label>' +
-    '<div class="champ"><span class="doux petit" style="display:block;margin-bottom:6px">Tag après l’appel <b style="color:var(--danger)">*</b> <span class="pale">(obligatoire pour valider · actuel : ' + esc(c.Tag || '—') + ')</span></span>' +
-      '<div class="choix-tag" id="apTags">' + S.d.tags.map(t => '<button type="button" data-aptag="' + t + '">' + t + '</button>').join('') + '</div>' +
-      '<div id="apSous" style="margin-bottom:14px"></div></div>' +
-    '<label class="champ"><span>Devis</span><select id="apDevis"><option value="">Inchangé (' + esc(c.Devis || 'Aucun') + ')</option>' + S.d.devis.map(t => '<option>' + t + '</option>').join('') + '</select></label>' +
-    '<label class="interrupteur" style="margin-bottom:12px"><input type="checkbox" id="apRappel"><i></i>Programmer un rappel</label>' +
-    '<div id="apZone" class="grille-2" style="display:none"><label class="champ"><span>Date</span><input type="date" id="apDate" value="' + dateLocale(new Date(Date.now() + 864e5)) + '"></label>' +
-      '<label class="champ"><span>Heure</span><input type="time" id="apHeure" value="10:00"></label></div>',
-    pied: '<span class="gauche pale petit" id="apAide">Choisissez un tag pour valider</span><button class="btn" data-fermer id="apAnnuler">Annuler</button><button class="btn principal" id="apOk" disabled>Enregistrer l’appel</button>', fermable: false });
-  let resultat = 'Joint', tag = '', sous = '';
-  // Sous-catégories du tag choisi (facultatives, plusieurs possibles) ; on part de celles de la fiche si le tag ne change pas.
-  const dessinerSous = () => {
-    f.$('#apSous').innerHTML = raisonsHtml(tag, sous, 'appel-' + c.ID);
-    brancherRaisons(f.$('#apSous'), tag, () => sous, v => { sous = v; dessinerSous(); }, dessinerSous);
+  if (!tel && !tel2) return toast('Pas de numéro sur la fiche.', true);
+  const composer = numero => {
+    if (S.appel && S.appel.clientId !== c.ID) validerAppel(); // appel précédent laissé ouvert : enregistré avec le tag proposé
+    if (!S.appel || S.appel.clientId !== c.ID) S.appel = { clientId: c.ID, tacheId: tache ? tache.ID : '', depart: Date.now(), absent: 0, duree: 0, tag: '' };
+    garderAppel();
+    if (c.Tag === 'New') { enregistrerChamps(c.ID, { Tag: 'Qualifying' }); toast(nomClient(c) + ' passe en Qualifying'); }
+    bandeauAppel();
+    ouvrirTel(numero);
   };
-  // Choisir le tag est obligatoire pour valider l'appel
-  f.el.querySelectorAll('[data-aptag]').forEach(b => b.onclick = () => {
-    tag = b.dataset.aptag;
-    sous = categoriesPour(tag, client(c.ID)['Catégorie'], client(c.ID).Tag);
-    S.raisons = null;
-    f.el.querySelectorAll('[data-aptag]').forEach(x => { x.className = x === b ? 'actif tag ' + tag : ''; });
-    dessinerSous();
-    f.$('#apOk').disabled = false;
-    f.$('#apAide').textContent = '';
-  });
-  // Durée de l'appel, mesurée sans service payant : temps passé hors de l'app (iPhone) ou hors de la fenêtre (Mac, appel via l'iPhone).
-  let depart = 0, absent = 0, duree = 0;
-  const choisirResultat = r => f.el.querySelectorAll('#apRes button').forEach(x => { if (x.dataset.r === r) x.click(); });
-  const quitte = () => { if (depart && !absent) absent = Date.now(); };
+  if (!tel || !tel2) return composer(tel || tel2);
+  const f = fenetre({ titre: 'Appeler ' + esc(nomClient(c)), corps:
+    '<a class="btn principal" data-num="' + esc(tel) + '" href="#" style="width:100%;padding:12px;margin-bottom:8px">' + ico('tel') + esc(telAffiche(c['Téléphone'])) + '</a>' +
+    '<a class="btn" data-num="' + esc(tel2) + '" href="#" style="width:100%">' + ico('tel') + '2e numéro : ' + esc(telAffiche(c['Téléphone 2'])) + '</a>' });
+  f.el.querySelectorAll('[data-num]').forEach(a => a.onclick = e => { e.preventDefault(); f.fermer(); composer(a.dataset.num); });
+}
+
+const ouvrirTel = numero => { location.href = 'tel:' + numero; }; // iPhone : appel ; Mac : FaceTime / iPhone
+/** Au lancement de l'application : bandeau de l'appel resté sans tag (application fermée pendant l'appel). */
+function reprendreAppel() {
+  try { S.appel = JSON.parse(lire('crm_appel', '') || 'null'); } catch (e) { S.appel = null; }
+  bandeauAppel();
+}
+const garderAppel = () => garder('crm_appel', S.appel ? JSON.stringify(S.appel) : '');
+function tagPropose(a) {
+  const c = client(a.clientId);
+  if (a.tag) return a.tag;
+  if (!c) return '';
+  return a.duree >= 20 && !['Qualified', 'Won'].includes(c.Tag) ? 'Qualifying' : c.Tag;
+}
+
+/** Bandeau d'appel en haut de l'écran : client (lien vers sa fiche), durée, tag proposé, « Valider ». */
+function bandeauAppel() {
+  let z = document.getElementById('bandeauAppel');
+  const a = S.appel, c = a && S.d && client(a.clientId);
+  if (!c) {
+    if (z) z.remove();
+    document.body.classList.remove('avec-appel');
+    if (a && S.d) { S.appel = null; garderAppel(); } // fiche supprimée entre-temps
+    return;
+  }
+  if (!z) { z = document.createElement('div'); z.id = 'bandeauAppel'; z.className = 'bandeau-appel'; document.body.prepend(z); }
+  const tag = tagPropose(a);
+  const duree = a.duree ? dureeTexte(a.duree) + (a.duree < 20 ? ' · pas de réponse ?' : '') : 'en cours';
+  z.innerHTML = '<span class="ba-ico">' + ico('tel') + '</span>' +
+    '<a href="#" class="ba-nom" id="baFiche"><b>' + esc(nomClient(c)) + '</b><span>' + esc(duree) + '</span></a>' +
+    '<select id="baTag" aria-label="Tag après l’appel">' + S.d.tags.map(t => '<option' + (t === tag ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select>' +
+    '<button class="btn principal mini" id="baOk">' + ico('ok') + 'Valider</button>';
+  document.body.classList.add('avec-appel');
+  document.documentElement.style.setProperty('--h-appel', z.offsetHeight + 'px');
+  z.querySelector('#baFiche').onclick = e => { e.preventDefault(); aller('fiche', c.ID); };
+  z.querySelector('#baTag').onchange = e => { a.tag = e.target.value; garderAppel(); };
+  z.querySelector('#baOk').onclick = () => validerAppel();
+}
+
+/** Enregistre l'appel (activité avec sa durée et son résultat), le tag choisi et la tâche d'appel faite ; ferme le bandeau. */
+function validerAppel() {
+  const a = S.appel, c = a && client(a.clientId);
+  S.appel = null; garderAppel(); bandeauAppel();
+  if (!c) return;
+  const tag = tagPropose(a);
+  const resultat = !a.duree ? 'Joint' : a.duree < 20 ? 'Pas de réponse' : 'Joint';
+  const texte = a.duree ? 'Durée : ' + dureeTexte(a.duree) : '';
+  // Instantané : l'appel et le tag apparaissent tout de suite ; le serveur suit en arrière-plan.
+  const prov = { ID: 'tmp' + Date.now(), ClientID: c.ID, Date: new Date().toISOString(), Type: 'Appel', 'Résultat': resultat, Auteur: S.moi, Texte: texte };
+  S.d.activites.push(prov);
+  enFond(appel('crmActivite', { clientId: c.ID, type: 'Appel', resultat, texte, auteur: S.moi }).then(r => {
+    S.d.activites = S.d.activites.filter(x => x.ID !== prov.ID); remplacer(S.d.activites, r.activite);
+    const ici = client(c.ID); // le tag choisi ici reste celui de l'écran (il part par enregistrerChamps)
+    if (r.client && ici) majClient(Object.assign(r.client, { Tag: ici.Tag, 'Catégorie': ici['Catégorie'], Devis: ici.Devis }));
+    if (S.page === 'fiche') afficher();
+  }));
+  if (tag && tag !== client(c.ID).Tag) enregistrerChamps(c.ID, { Tag: tag, 'Catégorie': categoriesPour(tag, client(c.ID)['Catégorie'], client(c.ID).Tag) });
+  const tache = a.tacheId && S.d.taches.find(t => t.ID === a.tacheId);
+  if (tache && !tache.Faite) { tache.Faite = true; if (S.tacheEnCours === tache.ID) S.tacheEnCours = null; enFond(appel('crmTacheFaite', tache.ID, true).then(t => remplacer(S.d.taches, t))); }
+  afficher(); toast('Appel enregistré · ' + tag);
+}
+
+// Durée de l'appel en cours : on quitte l'app pour téléphoner, la durée est le temps passé dehors.
+(() => {
+  const quitte = () => { if (S.appel && !S.appel.absent) { S.appel.absent = Date.now(); garderAppel(); } };
   const revient = () => {
-    if (!depart || !absent) return;
-    duree = Math.round((Date.now() - absent) / 1000);
-    absent = 0;
-    const z = f.$('#apDuree');
-    z.hidden = false;
-    z.querySelector('span').innerHTML = 'Durée de l’appel : <b>' + dureeTexte(duree) + '</b> (estimée)' + (duree < 20 ? ' · probablement pas de réponse' : '');
-    choisirResultat(duree < 20 ? 'Pas de réponse' : 'Joint');
+    const a = S.appel;
+    if (!a || !a.absent) return;
+    a.duree += Math.round((Date.now() - a.absent) / 1000);
+    a.absent = 0;
+    garderAppel(); bandeauAppel();
   };
-  const surVisibilite = () => (document.hidden ? quitte() : revient());
-  document.addEventListener('visibilitychange', surVisibilite);
+  document.addEventListener('visibilitychange', () => (document.hidden ? quitte() : revient()));
   window.addEventListener('blur', quitte);
   window.addEventListener('focus', revient);
-  const fermer = f.fermer;
-  f.fermer = () => { document.removeEventListener('visibilitychange', surVisibilite); window.removeEventListener('blur', quitte); window.removeEventListener('focus', revient); fermer(); };
-  // Appel composé : un « New » passe en Qualifying, et la fenêtre ne se ferme plus qu'en enregistrant l'appel
-  f.el.querySelectorAll('[data-composer]').forEach(a => a.addEventListener('click', () => {
-    depart = Date.now();
-    f.$('#apAnnuler').hidden = true;
-    f.$('#apAide').textContent = 'Appel en cours : choisissez un tag pour valider';
-    if (c.Tag === 'New') { enregistrerChamps(c.ID, { Tag: 'Qualifying' }); toast(nomClient(c) + ' passe en Qualifying'); }
-  }));
-  f.el.querySelectorAll('#apRes button').forEach(b => b.onclick = () => { resultat = b.dataset.r; f.el.querySelectorAll('#apRes button').forEach(x => x.classList.toggle('actif', x === b)); });
-  f.$('#apRappel').onchange = e => { f.$('#apZone').style.display = e.target.checked ? 'grid' : 'none'; };
-  f.$('#apOk').onclick = () => {
-    const texte = [duree ? 'Durée : ' + dureeTexte(duree) : '', f.$('#apTxt').value.trim()].filter(Boolean).join('\n');
-    if (!tag) return toast('Choisissez un tag pour valider l’appel', true);
-    // Instantané : l'appel, le tag, le rappel apparaissent tout de suite ; le serveur suit en arrière-plan.
-    const prov = { ID: 'tmp' + Date.now(), ClientID: c.ID, Date: new Date().toISOString(), Type: 'Appel', 'Résultat': resultat, Auteur: S.moi, Texte: texte };
-    S.d.activites.push(prov);
-    enFond(appel('crmActivite', { clientId: c.ID, type: 'Appel', resultat, texte, auteur: S.moi }).then(r => {
-      S.d.activites = S.d.activites.filter(a => a.ID !== prov.ID); remplacer(S.d.activites, r.activite);
-      const ici = client(c.ID); // le tag choisi ici reste celui de l'écran (il part par enregistrerChamps)
-      if (r.client && ici) majClient(Object.assign(r.client, { Tag: ici.Tag, 'Catégorie': ici['Catégorie'], Devis: ici.Devis }));
-      if (S.page === 'fiche') afficher();
-    }));
-    const changes = {};
-    if (tag !== client(c.ID).Tag) changes.Tag = tag;
-    if (sous !== String(client(c.ID)['Catégorie'] || '')) changes['Catégorie'] = sous;
-    if (f.$('#apDevis').value) changes.Devis = f.$('#apDevis').value;
-    if (Object.keys(changes).length) enregistrerChamps(c.ID, changes);
-    if (f.$('#apRappel').checked) {
-      const rappel = { clientId: c.ID, type: 'Appel', titre: 'Rappeler ' + (c['Prénom'] || nomClient(c)), echeance: versIso(f.$('#apDate').value, f.$('#apHeure').value), owner: c.Owner || S.moi, rappel: true };
-      const pt = { ID: 'tmp' + Date.now() + 'r', ClientID: c.ID, Type: 'Appel', Titre: rappel.titre, Notes: '', 'Échéance': rappel.echeance, Owner: rappel.owner, Faite: false };
-      S.d.taches.push(pt);
-      enFond(appel('crmTache', rappel).then(r => { S.d.taches = S.d.taches.filter(x => x.ID !== pt.ID); S.d.taches.push(r.tache); afficher(); if (r.avertissement) toast(r.avertissement, true); }));
-    }
-    if (tache) { tache.Faite = true; if (S.tacheEnCours === tache.ID) S.tacheEnCours = null; enFond(appel('crmTacheFaite', tache.ID, true).then(t => remplacer(S.d.taches, t))); }
-    f.fermer(); afficher(); toast('Appel enregistré');
-  };
-}
+})();
 
 function fenetreNote(c) {
   const f = fenetre({ titre: 'Note · ' + esc(nomClient(c)), corps: '<textarea id="noTxt" style="min-height:140px" placeholder="Votre note…"></textarea>',
