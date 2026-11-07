@@ -691,7 +691,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.07-1504';
+const VERSION_APP = '2026.11.07-1506';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1574,7 +1574,17 @@ function toutesVues() {
 }
 const filtresCourants = () => S.filtres || (toutesVues().find(v => v.ID === S.vue) || VUES_BASE[0]).f;
 
+/** E-mails de gestion (Réglages) : adresse complète ou domaine « @dpd.fr ». Leurs fiches n'apparaissent nulle part. */
+let gestionCache = { texte: null, liste: [] };
+function estGestion(c) {
+  const texte = String((S.d && S.d.reglages && S.d.reglages.EMAILS_GESTION) || '');
+  if (texte !== gestionCache.texte) gestionCache = { texte, liste: texte.split(/[\n,;]+/).map(x => x.trim().toLowerCase()).filter(Boolean) };
+  if (!c || !gestionCache.liste.length) return false;
+  return [c.Email, c['Email 2']].map(e => String(e || '').trim().toLowerCase()).filter(Boolean)
+    .some(a => gestionCache.liste.some(x => x.startsWith('@') ? a.endsWith(x) : a === x));
+}
 function correspond(c, f, q) {
+  if (estGestion(c)) return false;
   if (f.tags && f.tags.length && !f.tags.includes(c.Tag)) return false;
   if (f.exclureTags && f.exclureTags.includes(c.Tag)) return false;
   if (f.owner === '@aucun' ? c.Owner : f.owner && c.Owner !== (f.owner === '@moi' ? S.moi : f.owner)) return false;
@@ -3028,7 +3038,7 @@ function pageEmails() {
 // =================================================================== Boîte de réception (e-mails reçus sur contact@)
 /** E-mails reçus pas encore traités, du plus récent au plus ancien. Chaque e-mail est déjà rattaché à une fiche (créée au besoin). */
 const emailRecu = a => a.Type === 'E-mail' && ['Réponse reçue', 'Adresse en erreur'].includes(a['Résultat']);
-const emailsATraiter = () => S.d.activites.filter(a => a['À traiter'] === 'oui').sort((a, b) => String(b.Date).localeCompare(String(a.Date)));
+const emailsATraiter = () => S.d.activites.filter(a => a['À traiter'] === 'oui' && !estGestion(client(a.ClientID))).sort((a, b) => String(b.Date).localeCompare(String(a.Date)));
 const objetEmail = a => (String(a.Texte || '').match(/^Objet : (.*)/) || [])[1] || a['Résultat'] || 'E-mail';
 const extraitEmail = a => String(a.Texte || '').replace(/^Objet : .*\n*/, '').replace(/\n\n\(séquence « .* » arrêtée\)$/, '').trim();
 const ficheAuto = c => c && c.Source === 'E-mail reçu';
@@ -3036,7 +3046,7 @@ const sansAccents = t => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, 
 
 function ongletRecus() {
   const aTraiter = emailsATraiter();
-  const traites = S.recusTraites ? S.d.activites.filter(a => emailRecu(a) && a['À traiter'] !== 'oui' && Date.now() - new Date(a.Date) < 30 * 864e5)
+  const traites = S.recusTraites ? S.d.activites.filter(a => emailRecu(a) && !estGestion(client(a.ClientID)) && a['À traiter'] !== 'oui' && Date.now() - new Date(a.Date) < 30 * 864e5)
     .sort((a, b) => String(b.Date).localeCompare(String(a.Date))).slice(0, 40) : [];
   const ligne = (a, n) => {
     const c = client(a.ClientID);
@@ -3418,6 +3428,7 @@ function exporter(clients) {
 // =================================================================== Réglages
 function pageReglages() {
   const r = S.d.reglages;
+  estGestion(null); // liste des e-mails de gestion à jour (compteur)
   $('#page').innerHTML = '<div class="page"><div class="entete"><div><h1>Réglages</h1><p>Compte ' + esc(S.d.compte) + '</p></div></div>' +
     '<div style="display:grid;gap:16px;max-width:760px">' +
     '<div class="carte"><div class="carte-tete"><h2>Mon compte</h2><button class="btn mini" id="rgSortir">' + ico('sortie') + 'Se déconnecter</button></div><div class="carte-corps">' +
@@ -3444,7 +3455,12 @@ function pageReglages() {
     carteIA() +
     carteQonto() +
     '<div class="carte"><div class="carte-tete"><h2>Données</h2></div><div class="carte-corps rangee"><a class="btn" href="' + esc(S.d.classeurUrl) + '" target="_blank">' + ico('export') + 'Ouvrir le Google Sheet</a>' +
-      '<button class="btn" id="rgRecharger">' + ico('recharger') + 'Recharger les données</button></div></div></div></div>';
+      '<button class="btn" id="rgRecharger">' + ico('recharger') + 'Recharger les données</button></div></div>' +
+    '<div class="carte"><div class="carte-tete"><h2>E-mails de gestion</h2><span class="pale petit">' + gestionCache.liste.length + '</span></div><div class="carte-corps">' +
+      '<p class="doux petit" style="margin:0 0 10px">Livraisons, factures, notifications… : ces expéditeurs ne sont jamais repris dans le CRM (ni fiche, ni e-mail reçu, ni tâche), et leurs fiches déjà créées disparaissent. ' +
+      'Une adresse par ligne, ou un domaine entier : <code>@dpd.fr</code>.</p>' +
+      '<textarea id="rgGestion" rows="6" placeholder="notifications@colissimo.fr&#10;@dpd.fr">' + esc(r.EMAILS_GESTION || '') + '</textarea>' +
+      '<div class="rangee" style="justify-content:flex-end;margin-top:10px"><button class="btn principal" id="rgGestionOk">Enregistrer la liste</button></div></div></div></div></div>';
   if ($('#rgNotif')) $('#rgNotif').onclick = () => (Notification.permission === 'granted' ? activerNotifications(true).then(() => appelDiscret('crmPushTest')).then(() => toast('Essai envoyé : la notification arrive dans quelques secondes')) : activerNotifications(false).then(() => pageReglages())).catch(e => toast(e.message, true));
   $('#rgSortir').onclick = deconnecter;
   brancherRdv();
@@ -3456,6 +3472,11 @@ function pageReglages() {
   $('#rgMdpOk').onclick = () => occupe($('#rgMdpOk'), appel('crmChangerMdp', S.jeton, $('#rgMdp0').value, $('#rgMdp1').value))
     .then(() => { $('#rgMdp0').value = ''; $('#rgMdp1').value = ''; toast('Mot de passe changé'); });
   $('#rgRecharger').onclick = () => occupe($('#rgRecharger'), charger()).then(() => toast('Données à jour'));
+  $('#rgGestionOk').onclick = () => {
+    const liste = [...new Set($('#rgGestion').value.split(/[\n,;]+/).map(x => x.trim().toLowerCase()).filter(Boolean))].join('\n');
+    occupe($('#rgGestionOk'), appel('crmEnregistrerReglages', { EMAILS_GESTION: liste }))
+      .then(reg => { S.d.reglages = reg; pageReglages(); toast('Liste enregistrée : ces expéditeurs sont retirés du CRM'); });
+  };
   $('#rgOk').onclick = () => occupe($('#rgOk'), appel('crmEnregistrerReglages', {
     OWNERS: $('#rgOwners').value, QUOTA_JOUR: Number($('#rgQuota').value), HEURE_DEBUT: Number($('#rgDebut').value),
     HEURE_FIN: Number($('#rgFin').value), DUREE_RDV: Number($('#rgDuree').value), EQUIPE: $('#rgEquipe').value,
