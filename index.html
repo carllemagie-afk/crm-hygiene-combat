@@ -535,6 +535,8 @@
   .connexion form { width: 100%; max-width: 380px; padding: 30px 26px 26px; animation: apparait var(--doucement) both; }
   .connexion .logo { width: 38px; height: 38px; fill: none; stroke: var(--ardoise-800); stroke-width: 1.4; }
   .connexion .logo-crm { width: 64px; height: 64px; display: block; }
+  .btn.dictee.actif { background: #e53935; color: #fff; border-color: #e53935; animation: dictee 1.4s ease-in-out infinite; }
+  @keyframes dictee { 0%, 100% { box-shadow: 0 0 0 0 rgba(229,57,53,.45); } 50% { box-shadow: 0 0 0 7px rgba(229,57,53,0); } }
   /* Équipe : tâches entre nous + discussion */
   .equipe { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
   @media (max-width: 900px) { .equipe { grid-template-columns: minmax(0, 1fr); } }
@@ -713,7 +715,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.07-1626';
+const VERSION_APP = '2026.11.07-1630';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -821,6 +823,7 @@ function fenetreDevisQonto(c, facture) {
 
 const ICONES = {
   clients: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  micro: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/>',
   equipe: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>',
   taches: '<path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
   agenda: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
@@ -2400,9 +2403,46 @@ function appelQuitteFiche(page, id) {
   garderAppel(); bandeauAppel();
 }
 
+/**
+ * Dictaphone : on parle, le texte s'écrit dans la zone (reconnaissance vocale du navigateur, en français).
+ * Renvoie le HTML du bouton ; brancherDictee(zone, bouton) le relie à une zone de texte. Sans reconnaissance vocale
+ * (certains navigateurs) : pas de bouton, le micro du clavier de l'iPhone fait la même chose.
+ */
+const Reconnaissance = window.SpeechRecognition || window.webkitSpeechRecognition;
+const boutonDictee = id => Reconnaissance ? '<button type="button" class="btn dictee" id="' + id + '">' + ico('micro') + '<span>Dicter</span></button>' : '';
+function brancherDictee(zone, bouton) {
+  if (!Reconnaissance || !zone || !bouton) return () => {};
+  let rec = null, base = '';
+  const arreter = () => { if (rec) { rec.onend = null; rec.stop(); rec = null; } bouton.classList.remove('actif'); bouton.querySelector('span').textContent = 'Dicter'; };
+  bouton.onclick = () => {
+    if (rec) return arreter();
+    rec = new Reconnaissance();
+    rec.lang = 'fr-FR'; rec.continuous = true; rec.interimResults = true;
+    base = zone.value ? zone.value.replace(/\s*$/, ' ') : '';
+    rec.onresult = e => {
+      let fini = '', provisoire = '';
+      for (let i = 0; i < e.results.length; i++) (e.results[i].isFinal ? (fini += e.results[i][0].transcript) : (provisoire += e.results[i][0].transcript));
+      const texte = (fini + provisoire).trim();
+      zone.value = base + (texte ? texte.charAt(0).toUpperCase() + texte.slice(1) : '');
+    };
+    rec.onerror = e => {
+      arreter();
+      if (e.error === 'not-allowed') toast('Micro refusé : autorisez-le pour le CRM dans les réglages du téléphone ou du navigateur', true);
+      else if (e.error === 'service-not-allowed' || e.error === 'network') toast('Dictée indisponible ici : utilisez le micro 🎤 du clavier', true);
+    };
+    rec.onend = () => arreter(); // silence prolongé : le navigateur coupe, on peut relancer
+    try { rec.start(); bouton.classList.add('actif'); bouton.querySelector('span').textContent = 'Arrêter'; } catch (err) { arreter(); }
+  };
+  return arreter;
+}
+
 function fenetreNote(c) {
-  const f = fenetre({ titre: 'Note · ' + esc(nomClient(c)), corps: '<textarea id="noTxt" style="min-height:140px" placeholder="Votre note…"></textarea>',
-    pied: '<button class="btn" data-fermer>Annuler</button><button class="btn principal" id="noOk">Ajouter la note</button>' });
+  const f = fenetre({ titre: 'Note · ' + esc(nomClient(c)), corps: '<textarea id="noTxt" style="min-height:140px" placeholder="Votre note… ou appuyez sur « Dicter » et parlez"></textarea>',
+    pied: '<span class="gauche">' + boutonDictee('noDictee') + '</span><button class="btn" data-fermer>Annuler</button><button class="btn principal" id="noOk">Ajouter la note</button>' });
+  const finDictee = brancherDictee(f.$('#noTxt'), f.$('#noDictee'));
+  const fermerNote = f.fermer;
+  f.fermer = () => { finDictee(); fermerNote(); };
+  f.el.querySelectorAll('[data-fermer]').forEach(b => b.onclick = f.fermer);
   f.$('#noOk').onclick = () => {
     const texte = f.$('#noTxt').value.trim();
     if (!texte) return;
