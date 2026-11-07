@@ -691,7 +691,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.07-1506';
+const VERSION_APP = '2026.11.07-1531';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -2815,7 +2815,7 @@ function fenetreRdv(c) {
     '<label class="champ"><span>Titre</span><input type="text" id="rdTitre"></label>' +
     '<div class="grille-2"><label class="champ"><span>Date</span><input type="date" id="rdDate" value="' + dateLocale(d) + '"></label>' +
     '<label class="champ"><span>Heure</span><input type="time" id="rdHeure" value="10:00"></label>' +
-    '<label class="champ"><span>Durée (min)</span><input type="number" id="rdDuree" value="' + esc(S.d.reglages.DUREE_RDV || 30) + '" min="5" step="5"></label>' +
+    '<label class="champ"><span>Durée (min)</span><input type="number" id="rdDuree" value="' + esc(S.d.reglages.DUREE_RDV || 15) + '" min="5" step="5"></label>' +
     '<label class="champ"><span>Avec</span><select id="rdOwner">' + S.d.owners.map(o => '<option' + ((S.moi || (c && c.Owner)) === o ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select></label></div>' +
     '<label class="champ"><span>Lieu ou lien visio</span><input type="text" id="rdLieu" placeholder="À la salle, par téléphone, lien Meet…"></label>' +
     '<label class="champ"><span>Message de l’invitation</span><textarea id="rdNotes" style="min-height:70px"></textarea></label>' +
@@ -2834,7 +2834,7 @@ function fenetreRdv(c) {
   f.$('#rdClient').onchange = maj;
   maj();
   f.$('#rdOk').onclick = () => { const invitation = f.$('#rdInviter').checked; const envoi = (appel('crmRdv', { clientId: f.$('#rdClient').value, titre: f.$('#rdTitre').value.trim() || 'Rendez-vous Hygiène & Combat',
-    debut: versIso(f.$('#rdDate').value, f.$('#rdHeure').value), duree: Number(f.$('#rdDuree').value) || 30, lieu: f.$('#rdLieu').value.trim(),
+    debut: versIso(f.$('#rdDate').value, f.$('#rdHeure').value), duree: Number(f.$('#rdDuree').value) || 15, lieu: f.$('#rdLieu').value.trim(),
     notes: f.$('#rdNotes').value.trim(), inviter: f.$('#rdInviter').checked, owner: f.$('#rdOwner').value }))
     f.fermer(); toast('Rendez-vous en cours d’enregistrement…'); // la fenêtre se ferme tout de suite, l'agenda suit
     enFond(envoi.then(data => { S.d = data; afficher(); toast(invitation ? 'Rendez-vous planifié, confirmation envoyée' : 'Rendez-vous ajouté à l’agenda'); })); };
