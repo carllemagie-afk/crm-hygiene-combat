@@ -678,7 +678,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.04-0023';
+const VERSION_APP = '2026.11.07-1440';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -958,12 +958,13 @@ function rpc(fn, args) {
     .then(rep => {
       if (rep.ok) return rep.r;
       if (rep.erreur === 'SESSION_EXPIREE') { if (fn !== 'crmConnexion') sessionPerdue(); throw new Error('Session expirée : reconnectez-vous.'); }
-      if (rep.erreur === 'MDP_A_CHANGER') { ecranNouveauMdp(); throw new Error('Choisissez d’abord votre mot de passe.'); }
+      // Écran déjà affiché : ne pas le redessiner (les appels en arrière-plan effaçaient la saisie toutes les 2 s).
+      if (rep.erreur === 'MDP_A_CHANGER') { if (!$('#nmForm')) ecranNouveauMdp(); throw new Error('Choisissez d’abord votre mot de passe.'); }
       throw new Error(rep.erreur);
     });
 }
 function appel(fn, ...args) {
-  return rpc(fn, args).catch(e => { toast(e.message, true); throw e; });
+  return rpc(fn, args).catch(e => { if (!$('#nmForm')) toast(e.message, true); throw e; });
 }
 const appelDiscret = (fn, ...args) => rpc(fn, args);
 
