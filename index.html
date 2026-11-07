@@ -706,7 +706,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.07-1557';
+const VERSION_APP = '2026.11.07-1605';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -2450,15 +2450,19 @@ function fenetreEmail(c, apresEnvoi, brouillon) {
 }
 
 // =================================================================== Inscription dans une séquence
+/** Séquence « Qualifying » (nom qui contient « qualifying ») : en tête de liste et proposée d'office. */
+const seqQualifying = () => S.d.sequences.find(x => /qualifying/i.test(x.Nom));
 function optionsSequences(choisi) {
-  const cats = [...new Set(S.d.sequences.map(s => s['Catégorie'] || 'Divers'))];
-  return cats.map(cat => '<optgroup label="' + esc(cat) + '">' + S.d.sequences.filter(s => (s['Catégorie'] || 'Divers') === cat)
+  const q = seqQualifying();
+  const cats = [...new Set((q ? [q] : []).concat(S.d.sequences).map(s => s['Catégorie'] || 'Divers'))];
+  return cats.map(cat => '<optgroup label="' + esc(cat) + '">' + S.d.sequences.filter(s => (s['Catégorie'] || 'Divers') === cat).sort((a, b) => (b === q) - (a === q))
     .map(s => '<option value="' + s.ID + '"' + (s.ID === choisi ? ' selected' : '') + '>' + esc(s.Nom) + '</option>').join('') + '</optgroup>').join('');
 }
 function sequenceConseillee(c) {
   const nom = !c ? '' : c.Tag === 'Won' && c['Date rachat'] && new Date(c['Date rachat']) <= new Date(Date.now() + 7 * 864e5) ? 'Rachat ·' : c.Tag === 'Won' ? 'Won · Onboarding' : c.Tag === 'Lost' ? 'Lost' : c.Devis === 'Envoyé' ? 'Post-devis · Qualified' :
-    c.Tag === 'Qualified' ? 'Pré-devis · Qualified' : ['Unqualified', 'Qualifying'].includes(c.Tag) ? 'Pré-devis · Unqualified' : 'Pré-devis · New';
-  const s = S.d.sequences.find(x => x.Nom.startsWith(nom)) || S.d.sequences[0];
+    c.Tag === 'Qualified' ? 'Pré-devis · Qualified' : '';
+  // Prospect (New, Unqualified, Qualifying) ou pas de séquence propre à son cas : la séquence Qualifying d'abord
+  const s = (nom && S.d.sequences.find(x => x.Nom.startsWith(nom))) || seqQualifying() || S.d.sequences[0];
   return s ? s.ID : '';
 }
 
