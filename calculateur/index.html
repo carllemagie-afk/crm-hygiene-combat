@@ -8,7 +8,7 @@
 <!--
   Calculateur de consommation Hygiène & Combat (copié dans l'application par build.py, https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec remplacé).
   Ouvert depuis le CRM : menu « Calculateur », ou bouton « Conso » d'une fiche (?client=ID&nom=…&salle=…).
-  « Créer le PDF client » fabrique le PDF ; depuis une fiche, « Enregistrer sur la fiche » le range chez le client
+  « Créer le PDF client » fabrique le PDF ; depuis une fiche, il est aussitôt rangé chez le client (bouton « Réessayer » si l'envoi échoue)
   (comme l'outil comparaison) : il peut alors être joint aux e-mails avec {{Consommation PDF}}.
 
   Paramètres d'adresse (facultatifs) : ?tatamis=200&jours=6&parjour=1 (pré-remplissage), ?salle=…, ?client=ID&nom=…
@@ -263,10 +263,11 @@
       const pdf = await creerPdf();
       const nom = 'Consommation ' + (salle || 'Hygiène & Combat').replace(/[^\wÀ-ÿ -]/g, '').trim() + '.pdf';
       urlPdf = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
-      statut('PDF prêt. ' + (CRM_CLIENT ? '<button class="bouton" id="garder">Enregistrer sur la fiche</button> ' : '') +
+      statut('PDF prêt. ' + (CRM_CLIENT ? '<button class="bouton" id="garder" disabled>Enregistrement…</button> ' : '') +
         '<a class="bouton leger" href="' + urlPdf + '" download="' + nom.replace(/"/g, '') + '">↓ Télécharger</a> <button class="bouton leger" id="voir">Ouvrir le PDF</button>');
       $('voir').onclick = () => voirPdf(urlPdf, nom);
-      if (CRM_CLIENT) $('garder').onclick = () => garder(pdf, nom);
+      // Ouvert depuis une fiche : le PDF y est rangé tout de suite (un seul bouton, « Créer le PDF client »)
+      if (CRM_CLIENT) { $('garder').onclick = () => garder(pdf, nom); garder(pdf, nom); }
     } catch (e) { statut('Le PDF n’a pas pu être créé : ' + e.message, true); }
     b.disabled = false; b.textContent = 'Créer le PDF client';
   });
@@ -316,7 +317,12 @@
       if (!j.ok) throw Error(j.erreur === 'SESSION_EXPIREE' ? 'Session du CRM expirée : reconnectez-vous.' : j.erreur);
       b.textContent = '✓ Enregistré sur la fiche' + (CRM_NOM ? ' de ' + CRM_NOM : '');
       try { parent.postMessage({ type: 'crm-comparatif', comparatif: j.r }, location.origin); } catch (e) { /* hors CRM */ }
-    } catch (e) { b.disabled = false; b.textContent = 'Enregistrer sur la fiche'; statut('Non enregistré : ' + e.message, true); }
+    } catch (e) {
+      // Le message s'affiche à côté du bouton : Télécharger / Ouvrir restent disponibles
+      b.disabled = false; b.textContent = 'Réessayer l’enregistrement sur la fiche';
+      const m = document.getElementById('garderErreur') || Object.assign(document.createElement('span'), { id: 'garderErreur' });
+      m.style.cssText = 'color:#c0392b;font-weight:600;margin:0 8px'; m.textContent = 'Non enregistré : ' + e.message; b.after(m);
+    }
   }
 
   majPuces();
