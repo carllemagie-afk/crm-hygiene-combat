@@ -553,10 +553,13 @@
   .eq-envoi { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid var(--trait); }
   .eq-envoi textarea { flex: 1; resize: none; min-height: 40px; max-height: 140px; }
   /* Bandeau d'appel : reste en haut tant que le tag de l'appel n'est pas validé (fenetreAppel / bandeauAppel). */
-  .bandeau-appel { position: fixed; z-index: 55; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 10px;
+  .bandeau-appel { position: fixed; z-index: 55; top: 0; left: 0; right: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px;
     padding: calc(8px + env(safe-area-inset-top)) 12px 8px; background: var(--ardoise-900); color: #fff; box-shadow: var(--ombre-l); font-size: 14px; }
   .bandeau-appel .ba-ico { display: flex; color: var(--acier); }
   .bandeau-appel .ba-ico svg { width: 18px; height: 18px; }
+  .bandeau-appel .ba-gauche { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .bandeau-appel .ba-centre { display: flex; align-items: center; gap: 8px; justify-content: center; }
+  @media (max-width: 600px) { .bandeau-appel { grid-template-columns: minmax(0, 1fr); row-gap: 8px; } .bandeau-appel .ba-droite { display: none; } }
   .bandeau-appel .ba-nom { flex: 1; min-width: 0; color: #fff; text-decoration: none; display: flex; flex-direction: column; line-height: 1.25; }
   .bandeau-appel .ba-nom b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bandeau-appel .ba-nom span { font-size: 12px; opacity: .7; }
@@ -715,7 +718,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.07-1633';
+const VERSION_APP = '2026.11.07-1651';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -2342,10 +2345,10 @@ function bandeauAppel() {
   if (!z) { z = document.createElement('div'); z.id = 'bandeauAppel'; z.className = 'bandeau-appel'; document.body.prepend(z); }
   const tag = tagPropose(a);
   const duree = a.raccroche ? 'Appel terminé · validez le tag →' : a.duree ? dureeTexte(a.duree) + (a.duree < 20 ? ' · pas de réponse ?' : '') : 'en cours';
-  z.innerHTML = '<span class="ba-ico">' + ico('tel') + '</span>' +
-    '<a href="#" class="ba-nom" id="baFiche"><b>' + esc(nomClient(c)) + '</b><span>' + esc(duree) + '</span></a>' +
-    '<select id="baTag" aria-label="Tag après l’appel">' + ['Qualifying'].concat(S.d.tags.filter(t => t !== 'Qualifying')).map(t => '<option' + (t === tag ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select>' +
-    '<button class="btn principal mini" id="baOk">' + ico('ok') + 'Valider</button>';
+  z.innerHTML = '<div class="ba-gauche"><span class="ba-ico">' + ico('tel') + '</span>' +
+    '<a href="#" class="ba-nom" id="baFiche"><b>' + esc(nomClient(c)) + '</b><span>' + esc(duree) + '</span></a></div>' +
+    '<div class="ba-centre"><select id="baTag" aria-label="Tag après l’appel">' + ['Qualifying'].concat(S.d.tags.filter(t => t !== 'Qualifying')).map(t => '<option' + (t === tag ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select>' +
+    '<button class="btn principal mini" id="baOk">' + ico('ok') + 'Valider</button></div><div class="ba-droite"></div>';
   z.classList.toggle('a-valider', !!a.raccroche); // raccroché, tag pas encore validé : pulsation rouge
   document.body.classList.add('avec-appel');
   document.documentElement.style.setProperty('--h-appel', z.offsetHeight + 'px');
@@ -2378,9 +2381,8 @@ function validerAppel() {
 }
 
 // Durée de l'appel en cours : on quitte l'app pour téléphoner, la durée est le temps passé dehors.
-// « Raccroché » (bandeau rouge) : iPhone, l'app était cachée par l'écran d'appel et revient au premier plan = appel fini.
-// Mac (FaceTime / appel via l'iPhone) : on revient sur le CRM pendant l'appel pour lire la fiche ; l'appel est
-// considéré fini seulement quand on quitte la fiche de ce client (autre page, autre client).
+// « Raccroché » (bandeau rouge) : on revient souvent sur le CRM pendant l'appel (lire la fiche, envoyer un e-mail),
+// sur iPhone comme sur Mac : l'appel n'est considéré fini que quand on quitte la fiche de ce client (autre page, autre client).
 (() => {
   const quitte = () => { if (S.appel && !S.appel.absent) { S.appel.absent = Date.now(); garderAppel(); } };
   const revient = () => {
@@ -2388,16 +2390,13 @@ function validerAppel() {
     if (!a || !a.absent) return;
     a.duree += Math.round((Date.now() - a.absent) / 1000);
     a.absent = 0;
-    if (a.cache) { a.raccroche = true; a.cache = false; }
     garderAppel(); bandeauAppel();
   };
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { quitte(); if (S.appel) { S.appel.cache = true; garderAppel(); } } else revient();
-  });
+  document.addEventListener('visibilitychange', () => (document.hidden ? quitte() : revient()));
   window.addEventListener('blur', quitte);
   window.addEventListener('focus', revient);
 })();
-/** Mac : quitter la fiche du client appelé après l'appel = raccroché (le bandeau passe au rouge). */
+/** Quitter la fiche du client appelé après l'appel = raccroché (le bandeau passe au rouge). */
 function appelQuitteFiche(page, id) {
   const a = S.appel;
   if (!a || a.raccroche || !(a.duree > 0 || Date.now() - a.depart > 20000)) return;
