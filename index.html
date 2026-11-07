@@ -691,7 +691,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.07-1531';
+const VERSION_APP = '2026.11.07-1535';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -878,6 +878,7 @@ const $$ = s => [...document.querySelectorAll(s)];
 // <signature> Repris tel quel par l'application (aperçu dans la fenêtre d'e-mail) : rien de propre à Apps Script ici.
 const ADRESSE_IMAGES = 'https://carllemagie-afk.github.io/crm-hygiene-combat/';
 const EMAIL_SIGNATURE = 'contact@hygiene-combat.fr';
+const SITE_SIGNATURE = 'https://www.hygiene-combat.fr'; // ligne 🌐 et logo de la signature
 
 /** Ligne du réglage « Équipe » (Nom | Titre | Téléphone | Photo) de la personne qui envoie, retrouvée par son prénom. */
 function personneEquipe(owner, equipe) {
@@ -901,7 +902,7 @@ function lienRendezVous(lienRdv) {
 
 /** Version texte (partie « texte brut » de l'e-mail, et aperçu de séquence). */
 function signatureTexte(p, lienRdv) {
-  return [p.nom, 'Hygiène & Combat' + (p.titre ? ' | ' + p.titre : ''), p.tel, EMAIL_SIGNATURE, lienRdv ? 'Prendre rendez-vous : ' + lienRdv : '']
+  return [p.nom, 'Hygiène & Combat' + (p.titre ? ' | ' + p.titre : ''), p.tel, EMAIL_SIGNATURE, SITE_SIGNATURE, lienRdv ? 'Prendre rendez-vous : ' + lienRdv : '']
     .filter(Boolean).join('\n');
 }
 
@@ -926,10 +927,11 @@ function signatureHtml(p, lienRdv, marque) {
     : '<div class="hc-photo" style="width:72px;height:72px;border-radius:36px;background-color:#afdbfc;text-align:center;' + police + 'font-size:26px;line-height:72px;font-weight:bold;color:#1a1a1a;">' + e(initiales) + '</div>';
   // Logo sur fond transparent : écusson blanc détouré, lisible sur fond clair comme sombre. Les images de la signature sont
   // intégrées à l'e-mail à l'envoi (construireMime : cid:), elles s'affichent même quand les images distantes sont bloquées.
-  const logo = '<img src="' + ADRESSE_IMAGES + 'signature-logo-plaque.png" class="hc-logo" width="137" alt="Hygiène &amp; Combat" style="display:block;border:0;width:100%;max-width:137px;height:auto;margin-left:auto;">';
+  // Logo cliquable : il ouvre le site, comme la ligne 🌐
+  const logo = '<a href="' + SITE_SIGNATURE + '" target="_blank" style="display:block;text-decoration:none;"><img src="' + ADRESSE_IMAGES + 'signature-logo-plaque.png" class="hc-logo" width="137" alt="Hygiène &amp; Combat" style="display:block;border:0;width:100%;max-width:137px;height:auto;margin-left:auto;"></a>';
   // L'adresse e-mail peut passer à la ligne après « @ » sur un petit écran (sinon elle élargit toute la signature).
-  const ligne = (icone, texte, lien) => '<tr><td class="hc-petit" style="' + police + 'font-size:15px;line-height:22px;font-weight:bold;color:#1a1a1a;padding-top:6px;">' + icone + '&nbsp;' +
-    '<a href="' + e(lien) + '" style="color:#1a1a1a;text-decoration:none;">' + e(texte).replace(/ /g, '&nbsp;').replace(/-/g, '&#8209;').replace('@', '@<wbr>') + '</a></td></tr>';
+  const ligne = (icone, texte, lien, couleur) => '<tr><td class="hc-petit" style="' + police + 'font-size:15px;line-height:22px;font-weight:bold;color:#1a1a1a;padding-top:6px;">' + icone + '&nbsp;' +
+    '<a href="' + e(lien) + '" target="_blank" style="color:' + (couleur || '#1a1a1a') + ';text-decoration:' + (couleur ? 'underline' : 'none') + ';">' + e(texte).replace(/ /g, '&nbsp;').replace(/-/g, '&#8209;').replace('@', '@<wbr>') + '</a></td></tr>';
   // Bouton « plein » : la couleur est sur une case de tableau de largeur 100 % (et non sur le lien), pour que chaque bouton prenne
   // toute sa moitié de largeur même quand l'application de messagerie ignore display:block (iPhone, Gmail, Outlook).
   const bouton = (lien, texte, fond, couleur) => '<table cellpadding="0" cellspacing="0" border="0" role="presentation" width="100%" style="border-collapse:separate;width:100%;"><tr>' +
@@ -946,6 +948,7 @@ function signatureHtml(p, lienRdv, marque) {
         '<tr><td class="hc-petit" style="' + police + 'font-size:15px;line-height:22px;color:#777777;padding:4px 0 6px;">Hygiène &amp; Combat' + (p.titre ? ' | ' + e(p.titre) : '') + '</td></tr>' +
         (p.tel ? ligne('📞', p.tel, 'tel:' + tel) : '') +
         ligne('✉️', EMAIL_SIGNATURE, 'mailto:' + EMAIL_SIGNATURE) +
+        ligne('🌐', SITE_SIGNATURE.replace(/^https?:\/\//, '').replace(/\/$/, ''), SITE_SIGNATURE, '#4f7a96') +
       '</table></td>' +
       rond(logo, 23, 'hc-casel') +
     '</tr></table></td></tr>' +
