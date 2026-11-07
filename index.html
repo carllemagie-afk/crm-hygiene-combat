@@ -706,7 +706,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.07-1605';
+const VERSION_APP = '2026.11.07-1618';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -2698,14 +2698,22 @@ function fenetreSequence(ids) {
     // Premier e-mail retiré : la relance qui le remplace ouvre le fil avec l'objet d'origine.
     const premierMail = envoi.find(e => e.type === 'email');
     if (premierMail && !String(premierMail.objet || '').trim()) premierMail.objet = (modifiees.find(e => e.type === 'email' && e.objet) || {}).objet || '';
-    occupe(f.$('#sqOk'), appel('crmInscrire', { clientIds: ids, sequenceId: s.ID, owner: f.$('#sqOwner').value, maintenant, etapes: envoi })).then(r => {
-      S.d = r.data;
-      S.selection.clear();
-      f.fermer();
-      afficher();
-      toast(r.inscrits ? r.inscrits + ' client(s) inscrit(s) dans « ' + s.Nom + ' »' + (maintenant ? ' · 1re étape lancée' : ' · 1er envoi ' + relatif(D[O[0]].toISOString())) : 'Aucune inscription', !r.inscrits);
-      if (r.ignores.length) setTimeout(() => toast('Ignorés : ' + r.ignores.join(' ; '), true), 400);
-    });
+    // Instantané : la fenêtre se ferme et les fiches passent « En séquence » tout de suite ; l'inscription et le 1er e-mail
+    // partent en arrière-plan (le serveur met ~15 s quand il envoie le 1er e-mail), on peut aller sur d'autres clients.
+    const owner = f.$('#sqOwner').value;
+    const enCours = new Set(S.d.inscriptions.filter(i => i.Statut === 'En cours').map(i => i.ClientID));
+    const avecMail = envoi.some(e => e.type === 'email');
+    const valides = ids.filter(id => { const c = client(id); return c && !enCours.has(id) && (!avecMail || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(c.Email || '').trim())); });
+    valides.forEach(id => { const c = client(id); c['Séquence'] = 'En séquence'; c['Séquence nom'] = s.Nom; });
+    S.selection.clear();
+    f.fermer();
+    afficher();
+    toast(valides.length ? valides.length + ' client(s) inscrit(s) dans « ' + s.Nom + ' »' + (maintenant ? ' · 1er e-mail en cours d’envoi' : ' · 1er envoi ' + relatif(D[O[0]].toISOString())) : 'Aucune inscription possible', !valides.length);
+    appel('crmInscrire', { clientIds: ids, sequenceId: s.ID, owner, maintenant, etapes: envoi }).then(r => {
+      appliquerDonnees(r.data);
+      if (r.ignores.length) toast('Ignorés : ' + r.ignores.join(' ; '), true);
+      else if (r.inscrits && maintenant) toast('« ' + s.Nom + ' » : 1er e-mail envoyé');
+    }, () => charger());
   };
 }
 
