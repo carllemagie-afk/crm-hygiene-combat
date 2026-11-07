@@ -535,6 +535,21 @@
   .connexion form { width: 100%; max-width: 380px; padding: 30px 26px 26px; animation: apparait var(--doucement) both; }
   .connexion .logo { width: 38px; height: 38px; fill: none; stroke: var(--ardoise-800); stroke-width: 1.4; }
   .connexion .logo-crm { width: 64px; height: 64px; display: block; }
+  /* Équipe : tâches entre nous + discussion */
+  .equipe { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 900px) { .equipe { grid-template-columns: minmax(0, 1fr); } }
+  .eq-ajout { padding: 12px 16px; border-bottom: 1px solid var(--trait); display: grid; gap: 8px; }
+  .eq-ajout .rangee { gap: 8px; flex-wrap: wrap; } .eq-ajout select, .eq-ajout input[type=date] { width: auto; flex: 1; min-width: 120px; }
+  .eq-filtre { margin: 12px 16px 4px; }
+  .eq-discussion { display: flex; flex-direction: column; }
+  .eq-fil { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; height: min(60vh, 520px); overflow-y: auto; background: var(--fond); }
+  .eq-msg { display: flex; flex-direction: column; align-items: flex-start; max-width: 85%; }
+  .eq-msg.moi { align-self: flex-end; align-items: flex-end; }
+  .eq-bulle { background: #fff; border: 1px solid var(--trait); border-radius: 14px 14px 14px 4px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; line-height: 1.4; }
+  .eq-msg.moi .eq-bulle { background: var(--ardoise-800); color: #fff; border-color: transparent; border-radius: 14px 14px 4px 14px; }
+  .eq-msg small { color: #8a979e; font-size: 11.5px; margin-top: 3px; }
+  .eq-envoi { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid var(--trait); }
+  .eq-envoi textarea { flex: 1; resize: none; min-height: 40px; max-height: 140px; }
   /* Bandeau d'appel : reste en haut tant que le tag de l'appel n'est pas validé (fenetreAppel / bandeauAppel). */
   .bandeau-appel { position: fixed; z-index: 55; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 10px;
     padding: calc(8px + env(safe-area-inset-top)) 12px 8px; background: var(--ardoise-900); color: #fff; box-shadow: var(--ombre-l); font-size: 14px; }
@@ -691,7 +706,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.07-1535';
+const VERSION_APP = '2026.11.07-1548';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -799,6 +814,7 @@ function fenetreDevisQonto(c, facture) {
 
 const ICONES = {
   clients: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  equipe: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>',
   taches: '<path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
   agenda: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
   mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
@@ -842,6 +858,7 @@ const ETAPE_NOM = { email: 'E-mail', appel: 'Appel', tache: 'Tâche' };
 const PAGES = [
   { id: 'clients', nom: 'Clients', ico: 'clients', mobile: true },
   { id: 'taches', nom: 'Tâches', ico: 'taches', mobile: true },
+  { id: 'equipe', nom: 'Équipe', ico: 'equipe' },
   { id: 'objectifs', nom: 'Objectifs', ico: 'objectif', mobile: true },
   { id: 'emails', nom: 'E-mails', ico: 'mail', mobile: true },
   { id: 'agenda', nom: 'Agenda', ico: 'agenda' },
@@ -1249,7 +1266,7 @@ const fermerFenetres = () => $$('#couche .voile').forEach(v => v.remove());
  * (autre appareil, autre utilisateur, réponse d'un client, banque…) avec seulement les fiches modifiées.
  * L'écran se met à jour en 1 à 2 s, sans perdre ce que vous êtes en train d'écrire.
  */
-const TABLES_APP = { Clients: 'clients', 'Activités': 'activites', 'Tâches': 'taches', RDV: 'rdv', Vues: 'vues', 'Séquences': 'sequences',
+const TABLES_APP = { Clients: 'clients', 'Activités': 'activites', 'Tâches': 'taches', 'Équipe': 'equipe', RDV: 'rdv', Vues: 'vues', 'Séquences': 'sequences',
   'Modèles': 'modeles', Inscriptions: 'inscriptions', Commandes: 'commandes', Achats: 'achats', Banque: 'banque', Comparatifs: 'comparatifs', Intervenants: 'intervenants' };
 function surveiller() {
   if (S.surveillance) return;
@@ -1285,6 +1302,7 @@ function recevoir(r, base) {
   if (r.data) return appliquerDonnees(r.data);
   if (!r.changements || (base !== undefined && String(base) !== String(S.d.version))) return; // réponse dépassée : la suivante rattrape
   const avant = idsATraiter();
+  if (!S.d.equipe) S.d.equipe = [];
   r.changements.forEach(c => {
     const liste = S.d[TABLES_APP[c.t]];
     if (!liste) return;
@@ -1293,6 +1311,7 @@ function recevoir(r, base) {
     if (!c.l) { if (i >= 0) liste.splice(i, 1); } else if (i >= 0) liste[i] = c.l; else liste.push(c.l);
   });
   S.d.version = r.version;
+  if (S.page === 'equipe' && r.changements.some(c => c.t === 'Équipe')) majEquipe(); // en direct, même pendant la saisie d'un message
   redessiner();
   notifierEmails(avant);
 }
@@ -1303,7 +1322,11 @@ function saisieEnCours() {
   return $$('#page textarea, #page input:not([type=checkbox]):not([type=radio]):not([type=search])').some(el => el.value !== el.defaultValue);
 }
 function appliquerDonnees(d) {
-  if (saisieEnCours()) { S.enAttente = d; return; }
+  if (saisieEnCours()) {
+    S.enAttente = d;
+    if (S.page === 'equipe' && d.equipe) { S.d.equipe = d.equipe; majEquipe(); menus(); } // discussion à jour même pendant la saisie
+    return;
+  }
   S.enAttente = null;
   const avant = S.d ? idsATraiter() : null;
   S.d = d;
@@ -1386,7 +1409,7 @@ function proposerNotifications() {
 /** CRM ouvert par une notification (application fermée) : …/?ouvrir=#fiche/ID */
 function ouvrirSelonAdresse() {
   // ?fiche=ID : lien « Fiche CRM » des contacts du téléphone ; ?ouvrir=#… : notification ; #fiche/ID : ancien lien dont l'iPhone a décodé le %23.
-  const p = new URLSearchParams(location.search), h = decodeURIComponent(location.hash).match(/^#(fiche|agenda|taches)(?:\/(.+))?$/);
+  const p = new URLSearchParams(location.search), h = decodeURIComponent(location.hash).match(/^#(fiche|agenda|taches|equipe)(?:\/(.+))?$/);
   const ouvrir = p.get('fiche') ? '#fiche/' + p.get('fiche') : p.get('ouvrir') || (h ? h[0] : '');
   if (!ouvrir) return;
   history.replaceState(null, '', location.pathname);
@@ -1394,7 +1417,7 @@ function ouvrirSelonAdresse() {
 }
 /** Notification touchée : ouvrir la fiche, l'agenda ou les tâches. */
 function ouvrirDepuisNotif(url, essai) {
-  const m = String(url || '').match(/^#(fiche|agenda|taches)(?:\/(.+))?$/);
+  const m = String(url || '').match(/^#(fiche|agenda|taches|equipe)(?:\/(.+))?$/);
   if (!m || !S.d) return;
   const id = m[2] ? decodeURIComponent(m[2]) : '';
   if (m[1] === 'fiche' && id && client(id)) return aller('fiche', id);
@@ -1480,9 +1503,9 @@ function deconnecter() {
 
 function menus() {
   const tachesDuJour = S.d.taches.filter(t => !t.Faite && t.Owner === S.moi && t['Échéance'] && new Date(t['Échéance']) < new Date(debutJour().getTime() + 864e5)).length;
-  const nb = { taches: tachesDuJour, emails: emailsATraiter().length };
+  const nb = { taches: tachesDuJour, emails: emailsATraiter().length, equipe: equipeAFaire().length };
   const actif = p => (S.page === p.id || (p.id === 'clients' && ['fiche', 'import'].includes(S.page)) || (p.id === 'emails' && S.page === 'sequence') ||
-    (p.id === 'plus' && ['agenda', 'calculateur', 'stock', 'reglages'].includes(S.page))) ? 'actif' : '';
+    (p.id === 'plus' && ['equipe', 'agenda', 'calculateur', 'stock', 'reglages'].includes(S.page))) ? 'actif' : '';
   const bouton = p => '<button data-aller="' + p.id + '" data-nom="' + esc(p.nom) + '" aria-label="' + esc(p.nom) + '" class="' + actif(p) + '">' + ico(p.ico) + '<span class="nom">' + p.nom + '</span>' +
     (nb[p.id] ? '<span class="compteur' + (p.id === 'emails' ? ' alerte' : '') + '">' + nb[p.id] + '</span>' : '') + '</button>';
   $('#nav').innerHTML = '<div class="marque" id="basculeNav" data-nom="' + (document.body.classList.contains('nav-large') ? 'Réduire le menu' : 'Agrandir le menu') + '">' + BOUCLIER + '<div><b>HYGIÈNE &amp; COMBAT</b><span>CRM</span></div></div>' +
@@ -1520,7 +1543,7 @@ function afficher() {
   document.body.classList.toggle('mode-fiche', S.page === 'fiche');
   document.body.classList.toggle('nav-large', lire('crm_nav_large', '') === '1'); // grand écran : colonnes qui défilent séparément
   menus();
-  const pages = { clients: pageClients, fiche: pageFiche, taches: pageTaches, agenda: pageAgenda, emails: pageEmails, sequence: pageSequence, reglages: pageReglages, import: pageImport,
+  const pages = { clients: pageClients, fiche: pageFiche, taches: pageTaches, equipe: pageEquipe, agenda: pageAgenda, emails: pageEmails, sequence: pageSequence, reglages: pageReglages, import: pageImport,
     objectifs: pageObjectifs, stock: pageStock, calculateur: pageCalculateur };
   (pages[S.page] || pageClients)();
   memoriser();
@@ -2775,6 +2798,100 @@ function fenetreTache(t) {
     enFond(appel('crmTache', donnees).then(r => { S.d.taches = S.d.taches.filter(x => x.ID !== prov.ID); remplacer(S.d.taches, r.tache); afficher(); if (r.avertissement) toast(r.avertissement, true); }));
   };
   if (f.$('#taSuppr')) f.$('#taSuppr').onclick = () => { S.d.taches = S.d.taches.filter(x => x.ID !== t.ID); f.fermer(); afficher(); toast('Tâche supprimée'); enFond(appel('crmSupprimerTache', t.ID)); };
+}
+
+// =================================================================== Équipe : tâches entre nous et discussion (Carl / Matthieu)
+const prenomDe = n => String(n || '').trim().split(/\s+/)[0];
+const equipeAutre = () => (S.d.owners || []).find(o => o !== S.moi) || '';
+const pourMoi = x => x.Pour === S.moi || x.Pour === 'Nous deux';
+/** Tâches d'équipe pas encore faites qui me concernent (compteur du menu). */
+const equipeAFaire = () => (S.d.equipe || []).filter(x => x.Type === 'Tâche' && !x.Faite && pourMoi(x));
+
+function pageEquipe() {
+  const autre = equipeAutre();
+  S.filtreEquipe = S.filtreEquipe || 'moi';
+  $('#page').innerHTML = '<div class="page"><div class="entete"><div><h1>Équipe</h1><p>' + esc(prenomDe(S.moi)) + ' et ' + esc(prenomDe(autre) || '…') +
+    ' : le travail à faire entre nous et notre discussion, à jour en direct.</p></div></div>' +
+    '<div class="equipe">' +
+    '<div class="carte"><div class="carte-tete"><h2>Tâches</h2><label class="interrupteur petit"><input type="checkbox" id="eqFaites"' + (S.eqFaites ? ' checked' : '') + '><i></i>Faites</label></div>' +
+      '<form class="eq-ajout" id="eqForm"><input type="text" id="eqTexte" placeholder="Nouvelle tâche…" autocomplete="off">' +
+        '<div class="rangee"><select id="eqPour"><option value="' + esc(S.moi) + '">Pour moi</option>' + (autre ? '<option value="' + esc(autre) + '">Pour ' + esc(prenomDe(autre)) + '</option>' : '') +
+        '<option value="Nous deux">Nous deux</option></select><input type="date" id="eqDate" aria-label="Échéance (facultatif)">' +
+        '<button class="btn principal" type="submit">' + ico('plus') + 'Ajouter</button></div></form>' +
+      '<div class="segment eq-filtre">' + [['moi', 'Moi'], ['autre', prenomDe(autre) || 'L’autre'], ['tout', 'Tout']].map(([k, n]) =>
+        '<button data-eqf="' + k + '" class="' + (S.filtreEquipe === k ? 'actif' : '') + '">' + esc(n) + '</button>').join('') + '</div>' +
+      '<div id="eqTaches"></div></div>' +
+    '<div class="carte eq-discussion"><div class="carte-tete"><h2>Discussion</h2></div><div class="eq-fil" id="eqFil"></div>' +
+      '<form class="eq-envoi" id="eqMsgForm"><textarea id="eqMsg" rows="1" placeholder="Écrire à ' + esc(prenomDe(autre) || 'l’équipe') + '…"></textarea>' +
+      '<button class="btn principal" type="submit" aria-label="Envoyer">Envoyer</button></form></div>' +
+    '</div></div>';
+  majEquipe();
+  $$('[data-eqf]').forEach(b => b.onclick = () => { S.filtreEquipe = b.dataset.eqf; $$('[data-eqf]').forEach(x => x.classList.toggle('actif', x === b)); majEquipe(); });
+  $('#eqFaites').onchange = e => { S.eqFaites = e.target.checked; majEquipe(); };
+  $('#eqForm').onsubmit = e => {
+    e.preventDefault();
+    const texte = $('#eqTexte').value.trim();
+    if (!texte) return $('#eqTexte').focus();
+    const d = $('#eqDate').value;
+    ajouterEquipe({ type: 'Tâche', texte, pour: $('#eqPour').value, echeance: d ? versIso(d, '18:00') : '' });
+    $('#eqTexte').value = ''; $('#eqDate').value = '';
+  };
+  const envoyer = () => {
+    const texte = $('#eqMsg').value.trim();
+    if (!texte) return;
+    ajouterEquipe({ type: 'Message', texte });
+    $('#eqMsg').value = ''; $('#eqMsg').style.height = '';
+  };
+  $('#eqMsgForm').onsubmit = e => { e.preventDefault(); envoyer(); };
+  // Entrée envoie (Maj + Entrée : nouvelle ligne) ; la zone grandit avec le texte
+  $('#eqMsg').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); envoyer(); } };
+  $('#eqMsg').oninput = e => { e.target.style.height = ''; e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px'; };
+}
+
+/** Listes de la page Équipe seulement (les champs en cours de saisie ne bougent pas). */
+function majEquipe() {
+  const zt = $('#eqTaches'), zf = $('#eqFil');
+  if (!zt || !zf) return;
+  const autre = equipeAutre(), tout = S.d.equipe || [];
+  const filtre = { moi: pourMoi, autre: x => x.Pour === autre || x.Pour === 'Nous deux', tout: () => true }[S.filtreEquipe] || pourMoi;
+  const taches = tout.filter(x => x.Type === 'Tâche' && filtre(x) && (S.eqFaites || !x.Faite))
+    .sort((a, b) => (a.Faite - b.Faite) || String(a['Échéance'] || '9').localeCompare(String(b['Échéance'] || '9')) || String(b['Créé le']).localeCompare(String(a['Créé le'])));
+  zt.innerHTML = taches.length ? taches.map((x, n) => {
+    const ech = x['Échéance'] ? new Date(x['Échéance']) : null;
+    const pour = x.Pour === 'Nous deux' ? 'nous deux' : x.Pour === S.moi ? 'moi' : prenomDe(x.Pour);
+    return '<div class="tache' + (x.Faite ? ' faite' : '') + '" style="--n:' + Math.min(n, 25) + '"><input type="checkbox" class="case ronde" data-eqfaite="' + x.ID + '"' + (x.Faite ? ' checked' : '') + ' aria-label="Faite">' +
+      '<div class="corps"><b style="white-space:pre-wrap">' + esc(x.Texte) + '</b><div class="sous">' +
+        '<span>' + esc(prenomDe(x.Auteur)) + ' → ' + esc(pour) + '</span>' +
+        (ech ? '<span class="' + (!x.Faite && ech < new Date() ? 'retard' : '') + '">' + esc(relatif(x['Échéance'])) + '</span>' : '') +
+        (x.Faite && x['Fait le'] ? '<span>faite ' + esc(relatif(x['Fait le'])) + '</span>' : '') + '</div></div>' +
+      (x.Auteur === S.moi ? '<button class="btn fantome icone" data-eqsuppr="' + x.ID + '" aria-label="Supprimer">' + ico('poubelle') + '</button>' : '') + '</div>';
+  }).join('') : '<div class="carte-corps doux">' + (S.filtreEquipe === 'moi' ? 'Rien à faire pour vous. 👌' : 'Aucune tâche.') + '</div>';
+  const messages = tout.filter(x => x.Type === 'Message').sort((a, b) => String(a['Créé le']).localeCompare(String(b['Créé le']))).slice(-200);
+  const enBas = zf.scrollHeight - zf.scrollTop - zf.clientHeight < 60;
+  zf.innerHTML = messages.length ? messages.map(x => '<div class="eq-msg' + (x.Auteur === S.moi ? ' moi' : '') + '"><div class="eq-bulle">' + esc(x.Texte) + '</div>' +
+    '<small>' + (x.Auteur === S.moi ? '' : esc(prenomDe(x.Auteur)) + ' · ') + esc(fmtJourHeure(x['Créé le'])) + '</small></div>').join('')
+    : '<p class="doux petit" style="margin:auto;text-align:center">Pas encore de message.<br>Écrivez à ' + esc(prenomDe(autre) || 'l’équipe') + ' ici.</p>';
+  if (enBas || !zf.dataset.vu) { zf.scrollTop = zf.scrollHeight; zf.dataset.vu = '1'; }
+  zt.querySelectorAll('[data-eqfaite]').forEach(c => c.onchange = () => {
+    const x = tout.find(v => v.ID === c.dataset.eqfaite);
+    x.Faite = c.checked; x['Fait le'] = c.checked ? new Date().toISOString() : '';
+    majEquipe(); menus();
+    enFond(appel('crmEquipeFaite', x.ID, c.checked).then(r => remplacer(S.d.equipe, r)));
+  });
+  zt.querySelectorAll('[data-eqsuppr]').forEach(b => b.onclick = () => {
+    S.d.equipe = S.d.equipe.filter(v => v.ID !== b.dataset.eqsuppr);
+    majEquipe(); menus(); toast('Tâche supprimée');
+    enFond(appel('crmEquipeSupprimer', b.dataset.eqsuppr));
+  });
+}
+
+/** Ajout instantané (affiché tout de suite, enregistré en arrière-plan). */
+function ajouterEquipe(o) {
+  const prov = { ID: 'tmp' + Date.now(), Type: o.type, Auteur: S.moi, Pour: o.type === 'Tâche' ? o.pour : '', Texte: o.texte, 'Échéance': o.echeance || '',
+    Faite: false, 'Fait le': '', 'Créé le': new Date().toISOString() };
+  S.d.equipe = (S.d.equipe || []).concat([prov]);
+  majEquipe(); menus();
+  enFond(appel('crmEquipeAjouter', o).then(r => { S.d.equipe = S.d.equipe.filter(v => v.ID !== prov.ID); remplacer(S.d.equipe, r); majEquipe(); menus(); }));
 }
 
 function pageTaches() {
