@@ -718,7 +718,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.07-1651';
+const VERSION_APP = '2026.11.09-2316';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1200,7 +1200,7 @@ function brancherRaisons(racine, tag, lire, ecrire, redessiner) {
 /** Même règle que le serveur : {{Champ}} remplacé, variable vide supprimée avec l'espace qui la précède. */
 function rendre(modele, vars) {
   return String(modele ?? '').replace(/( ?)\{\{\s*([^}]+?)\s*\}\}/g, (tout, espace, nom) => {
-    if (/^(comparatif|consommation) pdf$/i.test(nom)) return tout; // remplacé par la pièce jointe au moment de l'envoi
+    if (/^(comparatif|consommation|fiche technique) pdf$/i.test(nom)) return tout; // remplacé par la pièce jointe au moment de l'envoi
     const v = String(vars[nom] ?? '').trim();
     if (!v && /^lien rdv$/i.test(nom)) return tout; // lien pas encore réglé : on le garde visible (l'envoi le signale)
     return v ? espace + v : '';
@@ -2493,7 +2493,8 @@ function fenetreEmail(c, apresEnvoi, brouillon) {
     const ligne = (veut, x, icone, manque) => !veut ? '' : x ? '<div class="piece-jointe">' + ico(icone) + '<span>Pièce jointe : <b>' + esc(x.Fichier) + '</b> (' + esc(fmtDate(x.Date)) + ')</span></div>'
       : '<div class="piece-jointe manque">' + ico('alerte') + '<span>' + manque + '</span></div>';
     f.$('#emPiece').innerHTML = ligne(/\{\{\s*comparatif pdf\s*\}\}/i.test(corps), dernierComparatif(c.ID), 'comparer', 'Aucun comparatif sur cette fiche : créez-le avec « Comparer » avant d’envoyer.') +
-      ligne(/\{\{\s*consommation pdf\s*\}\}/i.test(corps), dernierConso(c.ID), 'calcul', 'Aucun calcul de consommation sur cette fiche : créez-le avec « Conso » avant d’envoyer.');
+      ligne(/\{\{\s*consommation pdf\s*\}\}/i.test(corps), dernierConso(c.ID), 'calcul', 'Aucun calcul de consommation sur cette fiche : créez-le avec « Conso » avant d’envoyer.') +
+      (/\{\{\s*fiche technique pdf\s*\}\}/i.test(corps) ? '<div class="piece-jointe">' + ico('note') + '<span>Pièce jointe : <b>Fiche technique Hygiène &amp; Combat.pdf</b></span></div>' : '');
   };
   f.$('#emCorps').addEventListener('input', piece);
   f.$('#emModele').addEventListener('change', piece);
@@ -3377,7 +3378,8 @@ function ongletModeles() {
 
 function boutonsVariables() {
   return '<div class="variables">' + ['Prénom', 'Nom', 'Rôle', 'Salle', 'Ville', 'Discipline', 'Accroche', 'Owner', 'Lien RDV'].map(v => '<button type="button" data-var="' + v + '">{{' + v + '}}</button>').join('') +
-    '<button type="button" class="var-pdf" data-var="Comparatif PDF" title="Joint à l’e-mail le dernier comparatif PDF de la fiche du client">' + ico('comparer') + '{{Comparatif PDF}}</button></div>';
+    '<button type="button" class="var-pdf" data-var="Comparatif PDF" title="Joint à l’e-mail le dernier comparatif PDF de la fiche du client">' + ico('comparer') + '{{Comparatif PDF}}</button>' +
+    '<button type="button" class="var-pdf" data-var="Fiche technique PDF" title="Joint à l’e-mail la fiche technique du produit">' + ico('note') + '{{Fiche technique PDF}}</button></div>';
 }
 /** Les boutons {{Variable}} s'insèrent dans le dernier champ texte utilisé. */
 function brancherVariables(racine) {
