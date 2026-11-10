@@ -718,7 +718,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.10-2304';
+const VERSION_APP = '2026.11.10-2322';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1226,8 +1226,22 @@ function charger() {
 /** Action instantanée : l'écran a déjà changé, le serveur suit en arrière-plan ; s'il échoue (erreur affichée), les vraies données sont rechargées. */
 const enFond = promesse => promesse.catch(() => charger());
 
+/**
+ * Mac / PC, CRM installé comme application : la fenêtre s'ouvre toujours en très grand (tout l'écran, barre des menus et Dock
+ * mis à part) mais SANS le plein écran de macOS, qui crée un bureau à part : FaceTime s'ouvrirait ailleurs et ferait changer de bureau.
+ * Le navigateur ne permet de redimensionner que la fenêtre d'une application installée (pas un onglet de Chrome).
+ */
+function agrandirFenetre() {
+  const installee = matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: window-controls-overlay)').matches;
+  if (!installee || /iPhone|iPad|Android/.test(navigator.userAgent) || !window.screen || !screen.availWidth) return;
+  const x = screen.availLeft || 0, y = screen.availTop || 0, l = screen.availWidth, h = screen.availHeight;
+  if (Math.abs(window.outerWidth - l) < 4 && Math.abs(window.outerHeight - h) < 4) return; // déjà en grand
+  try { window.moveTo(x, y); window.resizeTo(l, h); } catch (e) { /* refusé par le navigateur : la fenêtre garde sa taille */ }
+}
+
 /** Ouverture : données de l'appareil affichées tout de suite (pas d'attente du serveur), puis mise à jour en arrière-plan. */
 function lancerCRM() {
+  agrandirFenetre();
   ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
   document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
   enregistrerServiceWorker();
