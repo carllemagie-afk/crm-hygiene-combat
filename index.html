@@ -718,7 +718,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.09-2316';
+const VERSION_APP = '2026.11.10-2251';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -757,7 +757,7 @@ function fenetreDevisQonto(c, facture) {
   const base = (facture && dernierDevisQonto(c)) || { bidons: r.BIDONS_PAR_COMMANDE, prix: r.PRIX_BIDON_HT, livraison: r.LIVRAISON_CLIENT_HT };
   const quoi = facture ? 'Facture' : 'Devis';
   const adresse = String(c.Adresse || '').trim();
-  const adr = { rue: adresse.replace(/,?\s*\d{5}.*$/, '').trim(), cp: (adresse.match(/\b\d{5}\b/) || [])[0] || '', ville: c.Ville || (adresse.match(/\d{5}\s+([^,]+)/) || [])[1] || '' };
+  const adr = { rue: adresse.replace(/,?\s*\d{5}.*$/, '').trim(), cp: (adresse.match(/\b\d{5}\b/) || [])[0] || '', ville: String((adresse.match(/\d{5}\s+([^,]+)/) || [])[1] || c.Ville || '').trim() }; // la ville de l'adresse passe avant l'ancienne Ville
   if (!q.connecte) {
     const f = fenetre({ titre: quoi + ' Qonto', corps: '<p class="doux" style="margin-top:0">Qonto n’est pas encore connecté au CRM (Réglages > Banque · Qonto). En attendant, créez le devis directement dans Qonto.</p>',
       pied: '<button class="btn" data-fermer>Fermer</button><a class="btn principal" href="' + QONTO_WEB + '" target="_blank" rel="noopener">' + LOGO_QONTO + 'Ouvrir Qonto</a>' });
@@ -1914,7 +1914,13 @@ function pageFiche() {
   if (defil) ['col-gauche', 'col-centre', 'col-droite'].forEach((k, i) => { const z = $('#page .fiche > .' + k); if (z) z.scrollTop = defil[i]; });
   if (defil) $('#page .page').style.animation = 'none'; // pas d'animation d'entrée quand la même fiche se redessine
   $$('[data-onglet]').forEach(b => b.onclick = () => { S.ongletFiche = b.dataset.onglet; pageFiche(); });
-  $$('[data-champ]').forEach(i => i.onchange = () => enregistrerChamp(c.ID, i.dataset.champ, i.type === 'tel' ? telAffiche(i.value) : i.value, i)); // numéro gardé avec son 0
+  $$('[data-champ]').forEach(i => i.onchange = () => {
+    if (i.dataset.champ === 'Adresse') { // « 5 rue Neuve, 69001 Lyon » : la Ville de la fiche suit la nouvelle adresse
+      const ville = String((i.value.match(/\b\d{5}\s+([^,]+)/) || [])[1] || '').trim();
+      if (ville && ville !== String(c.Ville || '').trim()) return enregistrerChamps(c.ID, { Adresse: i.value, Ville: ville }, i);
+    }
+    enregistrerChamp(c.ID, i.dataset.champ, i.type === 'tel' ? telAffiche(i.value) : i.value, i); // numéro gardé avec son 0
+  });
   $$('[data-tag]').forEach(b => b.onclick = () => {
     const tag = b.dataset.tag;
     if (tag === c.Tag) return;
