@@ -718,7 +718,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.10-2251';
+const VERSION_APP = '2026.11.10-2304';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1110,6 +1110,7 @@ function majClient(c) {
   if (c.__activite) remplacer(S.d.activites, c.__activite);
   ['__commande', '__tache', '__activite'].forEach(k => delete c[k]);
   remplacer(S.d.clients, c);
+  reappliquerLocal(S.d);
   return c;
 }
 /** Dernier clic d'un client sur un lien de nos e-mails (date ISO), calculé une fois par chargement des activités. */
@@ -1327,6 +1328,17 @@ function recevoir(r, base) {
     if (!c.l) { if (i >= 0) liste.splice(i, 1); } else if (i >= 0) liste[i] = c.l; else liste.push(c.l);
   });
   S.d.version = r.version;
+  if (S.enAttente) { // données mises de côté pendant une saisie : on y reporte aussi ces changements, sinon elles les effaceraient
+    r.changements.forEach(c => {
+      const liste = S.enAttente[TABLES_APP[c.t]];
+      if (!liste) return;
+      const i = liste.findIndex(x => x.ID === c.id);
+      if (!c.l) { if (i >= 0) liste.splice(i, 1); } else if (i >= 0) liste[i] = c.l; else liste.push(c.l);
+    });
+    S.enAttente.version = r.version;
+    reappliquerLocal(S.enAttente);
+  }
+  reappliquerLocal(S.d);
   if (S.page === 'equipe' && r.changements.some(c => c.t === 'Équipe')) majEquipe(); // en direct, même pendant la saisie d'un message
   redessiner();
   notifierEmails(avant);
@@ -1338,6 +1350,8 @@ function saisieEnCours() {
   return $$('#page textarea, #page input:not([type=checkbox]):not([type=radio]):not([type=search])').some(el => el.value !== el.defaultValue);
 }
 function appliquerDonnees(d) {
+  if (S.d && d && Number(d.version) < Number(S.d.version)) return; // réponse plus ancienne que l'écran : ignorée
+  reappliquerLocal(d);
   if (saisieEnCours()) {
     S.enAttente = d;
     if (S.page === 'equipe' && d.equipe) { S.d.equipe = d.equipe; majEquipe(); menus(); } // discussion à jour même pendant la saisie
@@ -1917,8 +1931,9 @@ function pageFiche() {
   $$('[data-champ]').forEach(i => i.onchange = () => {
     if (i.dataset.champ === 'Adresse') { // « 5 rue Neuve, 69001 Lyon » : la Ville de la fiche suit la nouvelle adresse
       const ville = String((i.value.match(/\b\d{5}\s+([^,]+)/) || [])[1] || '').trim();
-      if (ville && ville !== String(c.Ville || '').trim()) return enregistrerChamps(c.ID, { Adresse: i.value, Ville: ville }, i);
+      if (ville && ville !== String(client(c.ID).Ville || '').trim()) { i.defaultValue = i.value; return enregistrerChamps(c.ID, { Adresse: i.value, Ville: ville }, i); }
     }
+    if ('defaultValue' in i) i.defaultValue = i.value; // enregistré : le champ n'est plus « en cours de saisie »
     enregistrerChamp(c.ID, i.dataset.champ, i.type === 'tel' ? telAffiche(i.value) : i.value, i); // numéro gardé avec son 0
   });
   $$('[data-tag]').forEach(b => b.onclick = () => {
@@ -1970,9 +1985,39 @@ function pageFiche() {
   brancherTaches();
 }
 
+/**
+ * Valeurs modifiées sur cet appareil : gardées par-dessus les données du serveur jusqu'à confirmation, puis 90 s encore.
+ * Une réponse du temps réel calculée avant l'enregistrement (ou mise de côté pendant une saisie) ne peut donc plus
+ * ramener l'ancienne valeur à l'écran : ce qu'on vient de changer reste changé.
+ */
+const LOCAL_DUREE = 90000;
+function noterLocal(id, changes) {
+  S.local = S.local || {};
+  const l = S.local[id] = S.local[id] || {};
+  Object.keys(changes).forEach(k => { l[k] = { v: changes[k], fin: 0 }; });
+}
+function confirmerLocal(id, changes) {
+  const l = S.local && S.local[id];
+  if (l) Object.keys(changes).forEach(k => { if (l[k] && l[k].v === changes[k]) l[k].fin = Date.now() + LOCAL_DUREE; });
+}
+function oublierLocal(id, changes) {
+  const l = S.local && S.local[id];
+  if (l) Object.keys(changes).forEach(k => { if (l[k] && l[k].v === changes[k]) delete l[k]; });
+}
+function reappliquerLocal(d) {
+  if (!S.local || !d || !d.clients) return;
+  const maintenant = Date.now();
+  Object.keys(S.local).forEach(id => {
+    const l = S.local[id], c = d.clients.find(x => x.ID === id);
+    Object.keys(l).forEach(k => { if (l[k].fin && l[k].fin < maintenant) delete l[k]; else if (c) c[k] = l[k].v; });
+    if (!Object.keys(l).length) delete S.local[id];
+  });
+}
+
 /** Affiché tout de suite, enregistré en arrière-plan ; en cas d'échec, la fiche revient à l'état d'avant. */
 function enregistrerChamps(id, changes, element, rafraichir) {
   const c = client(id);
+  noterLocal(id, changes);
   const avant = Object.assign({}, c);
   Object.assign(c, changes);
   if (element) { element.classList.remove('enregistre'); void element.offsetWidth; element.classList.add('enregistre'); }
@@ -1992,11 +2037,13 @@ function envoyerFiche_(id) {
   const e = S.ecr[id], changes = e.attente, avant = e.avant;
   e.attente = null; e.avant = null;
   e.vol = appel('crmEnregistrerClient', id, changes).then(x => {
+    confirmerLocal(id, changes);
     if (e.attente) return x; // d'autres changements partent juste après : l'écran les montre déjà
     majClient(x);
     if (S.page === 'fiche' && S.id === id && (x.Tag === 'Won' && avant.Tag !== 'Won')) { pageFiche(); toast('Vente enregistrée : 1 commande ajoutée'); }
     return x;
   }, () => {
+    oublierLocal(id, changes);
     if (e.attente) return; // la suite repart avec les valeurs les plus récentes
     Object.keys(changes).forEach(k => { client(id)[k] = avant[k]; }); // échec : retour aux valeurs d'avant
     if (S.page === 'fiche') pageFiche();
