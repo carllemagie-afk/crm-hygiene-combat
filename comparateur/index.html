@@ -87,13 +87,14 @@ function crmCouleursAuto(d, a, b, p) {
 const crmCleCouleur = (prod, key) => (prod?.id || prod?.name || '') + '|' + key;
 function crmCouleurs(d, a, b, p) {
   const auto = crmCouleursAuto(d, a, b, p), m = state.crmCouleursManuelles || {};
-  return { a: m[crmCleCouleur(state.base, d.key)] || auto.a, b: m[crmCleCouleur(p, d.key)] || auto.b };
+  const choix = (v, defaut) => v === 'blanc' ? '' : v || defaut;
+  return { a: choix(m[crmCleCouleur(state.base, d.key)], auto.a), b: choix(m[crmCleCouleur(p, d.key)], auto.b) };
 }
 /** Deux boutons sous chaque valeur de la vue client : ✓ vert, ✕ rouge (le bouton allumé = couleur actuelle de la case). */
 function crmChoixHtml(col, r) {
   const k = r.couleurs?.[col] || '', att = ' data-crmc="' + col + ':' + esc(r.key) + '"';
-  return '<span class="crm-choix"><button type="button" class="crm-vert' + (k === 'vert' ? ' actif' : '') + '" data-crmset="vert"' + att + ' title="Mettre en vert">✓</button>' +
-    '<button type="button" class="crm-rouge' + (k === 'rouge' ? ' actif' : '') + '" data-crmset="rouge"' + att + ' title="Mettre en rouge">✕</button></span>';
+  return '<span class="crm-choix"><button type="button" class="crm-vert' + (k === 'vert' ? ' actif' : '') + '" data-crmset="vert"' + att + ' title="' + (k === 'vert' ? 'Enlever le vert (case blanche)' : 'Mettre en vert') + '">✓</button>' +
+    '<button type="button" class="crm-rouge' + (k === 'rouge' ? ' actif' : '') + '" data-crmset="rouge"' + att + ' title="' + (k === 'rouge' ? 'Enlever le rouge (case blanche)' : 'Mettre en rouge') + '">✕</button></span>';
 }
 // Phase de capture : le clic sur ✓ / ✕ ne doit pas ouvrir la modification de la donnée (le reste de la case le fait toujours).
 document.addEventListener('click', e => {
@@ -103,9 +104,10 @@ document.addEventListener('click', e => {
   const [col, key] = b.dataset.crmc.split(':'), prod = col === 'a' ? state.base : current();
   const d = clientDefinitions().find(x => x.key === key), r = clientRows().find(x => x.key === key);
   if (!prod || !d || !r) return;
-  const auto = crmCouleursAuto(d, r.a, r.b, current())[col], voulu = b.dataset.crmset;
+  const auto = crmCouleursAuto(d, r.a, r.b, current())[col], actuelle = r.couleurs?.[col] || '';
+  const voulu = b.dataset.crmset === actuelle ? '' : b.dataset.crmset; // recliquer sur la couleur allumée = case blanche
   const m = state.crmCouleursManuelles = state.crmCouleursManuelles || {}, k = crmCleCouleur(prod, key);
-  if (voulu === auto) delete m[k]; else m[k] = voulu;
+  if (voulu === auto) delete m[k]; else m[k] = voulu || 'blanc';
   save(); render();
 }, true);
 /** Visionneuse : le PDF s'affiche dans la page (pdf.js), sans téléchargement ; « Télécharger » reste possible. */
