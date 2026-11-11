@@ -748,7 +748,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.11-1940';
+const VERSION_APP = '2026.11.11-2036';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -2702,12 +2702,25 @@ function fenetreEmail(c, apresEnvoi, brouillon) {
 const CATEGORIE_SMS = 'SMS';
 const SMS_DEFAUT = [
   // Sans apostrophe courbe, tiret long ni « À » : ils feraient passer le SMS en Unicode (coupé tous les 70 caractères, donc 3 SMS au lieu d'1)
-  { Nom: 'Pas joint', Corps: "Bonjour, j'ai tenté de joindre votre salle. Quand puis-je vous appeler pour échanger avec vous ? Dans l'attente de votre retour, {{Mon prénom}} - Hygiène & Combat" },
-  { Nom: 'Qualified · merci pour l’échange', Corps: "Bonjour {{Prénom}}, merci pour notre échange. Vous retrouverez toutes les informations sur notre site : https://www.hygiene-combat.fr. Belle journée, {{Mon prénom}} - Hygiène & Combat" },
+  // Présentation sur plusieurs lignes (demande de Carl)
+  { Nom: 'Pas joint', Corps: "Bonjour,\nJ'ai tenté de joindre votre salle. Quand puis-je vous appeler pour échanger avec vous ?\nDans l'attente de votre retour,\n{{Mon prénom}} - Hygiène & Combat" },
+  { Nom: 'Qualified · merci pour l’échange', Corps: "Bonjour {{Prénom}},\nMerci pour notre échange. Vous retrouverez toutes les informations sur notre site : https://www.hygiene-combat.fr.\nBelle journée,\n{{Mon prénom}} - Hygiène & Combat" },
 ];
+// Anciens textes de base (sur une ligne) : remplacés par les nouveaux s'ils n'ont pas été modifiés à la main
+const SMS_ANCIENS = {
+  "Bonjour, j'ai tenté de joindre votre salle. Quand puis-je vous appeler pour échanger avec vous ? Dans l'attente de votre retour, {{Mon prénom}} - Hygiène & Combat": 0,
+  "Bonjour {{Prénom}}, merci pour notre échange. Vous retrouverez toutes les informations sur notre site : https://www.hygiene-combat.fr. Belle journée, {{Mon prénom}} - Hygiène & Combat": 1,
+};
 const modelesSms = () => S.d.modeles.filter(m => m['Catégorie'] === CATEGORIE_SMS);
 /** Les deux SMS de base sont créés une fois (s'il n'y a encore aucun modèle SMS). */
 function assurerModelesSms() {
+  if (modelesSms().length && !S.smsEnCreation) {
+    const anciens = modelesSms().filter(m => SMS_ANCIENS[m.Corps] !== undefined);
+    if (!anciens.length) return Promise.resolve();
+    S.smsEnCreation = true;
+    return Promise.all(anciens.map(m => appel('crmEnregistrerModele', Object.assign({}, m, { Corps: SMS_DEFAUT[SMS_ANCIENS[m.Corps]].Corps })).then(r => remplacer(S.d.modeles, r))))
+      .catch(() => {}).finally(() => { S.smsEnCreation = false; });
+  }
   if (modelesSms().length || S.smsEnCreation) return Promise.resolve();
   S.smsEnCreation = true;
   return Promise.all(SMS_DEFAUT.map(m => appel('crmEnregistrerModele', { Nom: m.Nom, 'Catégorie': CATEGORIE_SMS, Objet: '', Corps: m.Corps }).then(r => remplacer(S.d.modeles, r))))
@@ -2730,7 +2743,7 @@ function fenetreSms(c, appelEnCours) {
       '<label class="champ"><span>Message</span><textarea id="smTexte" style="min-height:130px"></textarea></label>' +
       '<p class="pale petit" style="margin:0">Messages s’ouvre avec le texte : vérifiez et envoyez. Modifiez les modèles dans E-mails › Modèles (catégorie « SMS »).</p>',
       pied: '<span class="gauche pale petit" id="smCompte"></span><button class="btn" data-fermer>Annuler</button><button class="btn principal" id="smOk">' + ico('sms') + 'Ouvrir dans Messages</button>' });
-    const remplir = () => { const m = modeles.find(x => x.ID === f.$('#smModele').value); f.$('#smTexte').value = rendre(m ? m.Corps : '', variables(c, owner)); compte(); };
+    const remplir = () => { const m = modeles.find(x => x.ID === f.$('#smModele').value); f.$('#smTexte').value = rendre(m ? m.Corps : '', variables(c, owner)).replace(/[ \t]+,/g, ','); compte(); };
     const GSM = /^[@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&'()*+,\-./0-9:;<=>?¡A-ZÄÖÑÜ§¿a-zäöñüà^{}\\\[~\]|€]*$/;
     const compte = () => { const t = f.$('#smTexte').value, n = t.length, uni = !GSM.test(t), un = uni ? 70 : 160, suite = uni ? 67 : 153;
       f.$('#smCompte').textContent = n + ' caractères · ' + (n <= un ? 1 : Math.ceil(n / suite)) + ' SMS' + (uni ? ' (caractère spécial : SMS plus courts)' : ''); };
