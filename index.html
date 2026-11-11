@@ -743,7 +743,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.11-0201';
+const VERSION_APP = '2026.11.11-1334';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -2405,7 +2405,11 @@ function fenetreAppel(c, tache) {
     }
     if (!S.appel || S.appel.clientId !== c.ID) S.appel = { clientId: c.ID, tacheId: tache ? tache.ID : '', depart: Date.now(), absent: 0, duree: 0, tag: '' };
     garderAppel();
-    if (c.Tag === 'New') { enregistrerChamps(c.ID, { Tag: 'Qualifying' }); toast(nomClient(c) + ' passe en Qualifying'); }
+    // Appeler : la fiche passe à la personne qui appelle (owner) et, si elle est New, en Qualifying. Un seul enregistrement, instantané.
+    const ch = {}, faits = [];
+    if (c.Tag === 'New') { ch.Tag = 'Qualifying'; faits.push('Qualifying'); }
+    if (S.moi && c.Owner !== S.moi && (S.d.owners || []).includes(S.moi)) { ch.Owner = S.moi; faits.push('owner : ' + S.moi.split(' ')[0]); }
+    if (faits.length) { enregistrerChamps(c.ID, ch); toast(nomClient(c) + ' · ' + faits.join(' · ')); }
     bandeauAppel();
     ouvrirTel(numero);
   };
