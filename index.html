@@ -329,6 +329,11 @@
   @media (max-width: 760px) { .pl-grille { display: none; } .pl-liste { display: block; } }
   .cadre-outil { display: block; width: 100%; min-height: 70vh; border: 0; border-radius: var(--rayon, 14px); background: #fff; }
   .piece-jointe { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--acier-50); border: 1px solid var(--trait); font-size: 13px; margin: 0 0 10px; }
+  .docs-client { display: grid; gap: 6px; margin-bottom: 10px; }
+  .doc-client { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--trait); font-size: 13px; cursor: pointer; }
+  .doc-client input { width: auto; margin: 0; }
+  .doc-client.coche { background: var(--acier-50); border-color: var(--acier); }
+  .doc-client svg { width: 16px; height: 16px; flex: none; }
   .piece-jointe.manque { background: var(--attention-50); border-color: #ecd3a8; color: var(--attention); }
   .variables button.var-pdf { border-style: dashed; }
   .action { display: flex; flex-direction: column; align-items: center; gap: 6px; border: 0; background: none; cursor: pointer; font-size: 12.5px; color: var(--doux); padding: 4px 0; }
@@ -743,7 +748,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.11-1634';
+const VERSION_APP = '2026.11.11-1751';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -2608,7 +2613,7 @@ function fenetreEmail(c, apresEnvoi, brouillon) {
       '<span>Modèle</span><select id="emModele">' + optionsModeles('') + '</select></div>' +
     '<label class="champ"><span>Objet</span><input type="text" id="emObjet"></label>' +
     '<label class="champ" style="margin-bottom:6px"><span>Message</span><textarea id="emCorps" style="min-height:220px" placeholder="Bonjour…"></textarea></label>' +
-    '<div id="emPiece"></div><div class="signature" id="emSignature"></div>',
+    '<div id="emPiece"></div><div id="emDocs"></div><div class="signature" id="emSignature"></div>',
     pied: '<span class="gauche pale petit">Envoyé tout de suite depuis contact@</span><button class="btn" data-fermer>Annuler</button><button class="btn principal" id="emOk">' + ico('envoyer') + 'Envoyer</button>' });
   const vars = () => variables(c, f.$('#emOwner').value);
   const signature = () => { f.$('#emSignature').innerHTML = signatureHtml(personneEquipe(f.$('#emOwner').value, S.d.reglages.EQUIPE), lienRdvDe(f.$('#emOwner').value)); };
@@ -2632,6 +2637,26 @@ function fenetreEmail(c, apresEnvoi, brouillon) {
   };
   f.$('#emCorps').addEventListener('input', piece);
   f.$('#emModele').addEventListener('change', piece);
+  // Documents du client à joindre en un clic : comparatifs, calculs de consommation (calculateur) et fiche technique
+  const docsClient = [...(S.d.comparatifs || []).filter(x => x.ClientID === c.ID).sort((a, b) => String(b.Date).localeCompare(String(a.Date)))
+    .map(x => ({ id: x.ID, ico: estConso(x) ? 'calcul' : 'comparer', nom: estConso(x) ? 'Calcul de consommation' + (String(x.Produit || '').replace(/^Consommation\s*·?\s*/, '') ? ' · ' + String(x.Produit).replace(/^Consommation\s*·?\s*/, '') : '') : 'Comparatif · ' + (x.Produit || 'produit concurrent'), date: fmtDate(x.Date) })),
+    { id: 'fiche-technique', ico: 'note', nom: 'Fiche technique Hygiène & Combat', date: '' }];
+  const cochés = new Set((brouillon && brouillon.documents) || []);
+  const docs = () => {
+    const corps = f.$('#emCorps').value, parRepere = new Set();
+    if (/\{\{\s*comparatif pdf\s*\}\}/i.test(corps) && dernierComparatif(c.ID)) parRepere.add(dernierComparatif(c.ID).ID);
+    if (/\{\{\s*consommation pdf\s*\}\}/i.test(corps) && dernierConso(c.ID)) parRepere.add(dernierConso(c.ID).ID);
+    if (/\{\{\s*fiche technique pdf\s*\}\}/i.test(corps)) parRepere.add('fiche-technique');
+    f.$('#emDocs').innerHTML = '<div class="etiquette" style="margin:4px 0 6px">Joindre des documents du client</div><div class="docs-client">' + docsClient.map(x => {
+      const auto = parRepere.has(x.id);
+      return '<label class="doc-client' + (auto || cochés.has(x.id) ? ' coche' : '') + '"><input type="checkbox" data-doc="' + esc(x.id) + '"' + (auto || cochés.has(x.id) ? ' checked' : '') + (auto ? ' disabled' : '') + '>' +
+        ico(x.ico) + '<span><b>' + esc(x.nom) + '</b>' + (x.date ? ' <span class="pale">' + esc(x.date) + '</span>' : '') + (auto ? ' <span class="pale">· déjà joint par le modèle</span>' : '') + '</span></label>';
+    }).join('') + (docsClient.length === 1 ? '<div class="pale petit" style="margin-top:4px">Aucun comparatif ni calcul sur cette fiche pour l’instant (boutons « Comparer » et « Conso »).</div>' : '') + '</div>';
+    f.el.querySelectorAll('[data-doc]').forEach(b => b.onchange = () => { b.checked ? cochés.add(b.dataset.doc) : cochés.delete(b.dataset.doc); b.closest('.doc-client').classList.toggle('coche', b.checked); });
+  };
+  docs();
+  f.$('#emCorps').addEventListener('input', docs);
+  f.$('#emModele').addEventListener('change', docs);
   f.$('#emOk').onclick = () => {
     const objet = f.$('#emObjet').value.trim(), corps = f.$('#emCorps').value.trim();
     if (!objet || !corps) return toast('Indiquez un objet et un message', true);
@@ -2640,11 +2665,12 @@ function fenetreEmail(c, apresEnvoi, brouillon) {
     f.fermer();
     toast('Envoi en cours à ' + c.Email + '…');
     if (apresEnvoi) apresEnvoi();
-    rpc('crmEnvoyerEmail', [{ clientId: c.ID, objet, corps, owner }]).then(r => {
+    const documents = [...cochés];
+    rpc('crmEnvoyerEmail', [{ clientId: c.ID, objet, corps, owner, documents }]).then(r => {
       remplacer(S.d.activites, r.activite); S.d.envoisAujourdhui++; afficher(); toast('E-mail envoyé à ' + c.Email);
     }, e => {
       toast('E-mail NON envoyé : ' + e.message, true);
-      fenetreEmail(c, null, { objet, corps, owner });
+      fenetreEmail(c, null, { objet, corps, owner, documents });
     });
   };
 }
