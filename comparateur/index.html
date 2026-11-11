@@ -59,9 +59,49 @@ function crmPh(p) { const m = String(p?.cells?.ph?.value || '').replace(',', '.'
  * Un produit qui ne désinfecte pas affiche « Non désinfectant » (son coût au simple nettoyage reste indiqué en petit).
  */
 function crmDesinfecte(p) {
-  const d = clientDefinitions().find(x => x.key === 'disinfectant');
-  return d ? crmOuiNon(clientValue(p, d)) : null;
+  return p ? crmOuiNon(clientValue(p, { key: 'disinfectant', label: 'Désinfectant', group: 'Désinfectant', edit: 'disinfectant', parent: true })) : null;
 }
+/*
+ * Ligne de prix : « Coût par désinfection » (à dilution désinfectante, avec la note) ou « Prix du bidon » (prix HT du
+ * conditionnement, sans explication). Choix dans la barre de l'outil ; « Automatique » prend celui où notre produit est le
+ * moins cher (vert) : d'abord le coût par désinfection, sinon le prix au litre du bidon.
+ */
+function crmPrixLitre(p) { const pr = numeric(p?.cost?.price), v = numeric(p?.cost?.volume); return pr !== null && v > 0 ? pr / v : null; }
+function crmModePrix() {
+  const m = state.crmPrixMode || 'auto';
+  if (m !== 'auto') return m;
+  const p = current();
+  if (!p || crmDesinfecte(p) === false) return 'usage';
+  const ua = usage(state.base), ub = usage(p);
+  if (ua !== null && ub !== null && ua < ub) return 'usage';
+  const la = crmPrixLitre(state.base), lb = crmPrixLitre(p);
+  if (la !== null && lb !== null && la < lb) return 'bidon';
+  return 'usage';
+}
+function crmPrixBidon(p) {
+  const pr = numeric(p?.cost?.price), v = numeric(p?.cost?.volume);
+  if (pr === null) return null;
+  return { value: euros(pr) + ' HT', detail: v ? (v >= 1 ? 'Bidon de ' + quantity(v) + ' L' : quantity(v * 1000) + ' mL') : '', source: p?.cost?.sources?.price?.label || 'Saisie dans Coût à l’usage', kind: 'manual' };
+}
+document.addEventListener('change', e => {
+  if (e.target.id !== 'crm-mode-prix') return;
+  state.crmPrixMode = e.target.value; save(); render();
+});
+function crmMajModePrix() {
+  let sel = document.getElementById('crm-mode-prix');
+  if (!sel) {
+    const ref = document.getElementById('tablemode');
+    if (!ref) return;
+    sel = document.createElement('select');
+    sel.id = 'crm-mode-prix'; sel.setAttribute('aria-label', 'Prix affiché'); sel.style.cssText = 'width:auto;flex:0 0 auto;max-width:260px';
+    ref.after(sel);
+  }
+  const m = state.crmPrixMode || 'auto', auto = m === 'auto' ? crmModePrix() : '';
+  sel.innerHTML = [['auto', 'Prix auto' + (auto ? ' · ' + (auto === 'bidon' ? 'bidon' : 'désinfection') : '')], ['usage', 'Prix · désinfection'], ['bidon', 'Prix · bidon']]
+    .map(([v, t]) => '<option value="' + v + '"' + (v === m ? ' selected' : '') + '>' + t + '</option>').join('');
+  sel.style.display = comparisonMode === 'client' ? '' : 'none';
+}
+
 /** « 5 minutes », « 30 min », « 1 h », « 60 s », « 5 min à 1 h selon l'activité » → minutes : le temps le plus court annoncé (temps minimum pour être efficace). */
 function crmMinutes(t) {
   let max = null;
@@ -81,7 +121,7 @@ function crmPrixDesinfection(p, v) {
 }
 function crmValeur(d, p, v) {
   if (!p) return v;
-  if (d.cost) return crmPrixDesinfection(p, v);
+  if (d.cost) return crmModePrix() === 'bidon' ? crmPrixBidon(p) : crmPrixDesinfection(p, v);
   if (d.key === 'surface_damage') {
     const ph = crmPh(p);
     if (ph === null) return v;
@@ -110,6 +150,7 @@ function crmCouleurCase(d, v, p) {
   return '';
 }
 function crmCouleursAuto(d, a, b, p) {
+  if (d.cost && crmModePrix() === 'bidon') { const x = crmPrixLitre(state.base), y = crmPrixLitre(p); return x === null || y === null || x === y ? { a: '', b: '' } : { a: x < y ? 'vert' : 'rouge', b: x < y ? 'rouge' : 'vert' }; }
   if (d.cost && crmDesinfecte(p) === false) return { a: 'vert', b: 'rouge' };
   if (d.key === 'contact') { const x = crmMinutes(state.base?.cells?.contact?.value), y = crmMinutes(p?.cells?.contact?.value); return x === null || y === null || x === y ? { a: '', b: '' } : { a: x < y ? 'vert' : 'rouge', b: x < y ? 'rouge' : 'vert' }; }
   if (d.cost) { const x = usage(state.base), y = usage(p); return x === null || y === null || x === y ? { a: '', b: '' } : { a: x < y ? 'vert' : 'rouge', b: x < y ? 'rouge' : 'vert' }; }
@@ -273,12 +314,12 @@ function clientDefinitions(){return [
 {key:'pack',label:'Conditionnement',group:'Produit & prix',edit:'pack'},
 {key:'format',label:'Concentré ou prêt à l’emploi',group:'Produit & prix',edit:'format'},
 {key:'origin',label:'Origine de fabrication',group:'Produit & prix',edit:'origin'},
-{key:'contact',label:'Temps de contact',hint:'Pour désinfecter',group:'Produit & prix',edit:'contact'},{key:'calc_usage',label:'Coût par désinfection *',hint:'À dilution désinfectante',group:'Produit & prix',cost:true}
+{key:'contact',label:'Temps de contact',hint:'Pour désinfecter',group:'Produit & prix',edit:'contact'},(crmModePrix()==='bidon'?{key:'calc_usage',label:'Prix du bidon',group:'Produit & prix',cost:true}:{key:'calc_usage',label:'Coût par désinfection *',hint:'À dilution désinfectante',group:'Produit & prix',cost:true})
 ]}
 function clientValue(p,row){if(!p)return null;if(row.cost)return costRows().at(-1)[p.id==='base'?'a':'b'];let x=p.cells[row.key];const yes=key=>p.cells[key]?.value==='Oui';const explicit=(cell,word)=>cell?.value==='Oui'&&new RegExp('(?:^|[\\s·,;])'+word+'(?:[\\s·,:;]|$)','i').test(cell.evidence||'');if(!x?.value){if(row.key==='bactericidal'&&yes('en1276'))x=p.cells.en1276;if(row.key==='virucidal'&&yes('en14476'))x=p.cells.en14476;if(row.key==='detergent'&&explicit(p.cells.clean,'détergent'))x=p.cells.clean;if(row.key==='fungicidal'&&explicit(p.cells.en1650,'fongicide'))x=p.cells.en1650;if(row.key==='yeasticidal'&&(explicit(p.cells.en1650,'levuricide')||explicit(p.cells.en13697,'levuricide')))x=explicit(p.cells.en1650,'levuricide')?p.cells.en1650:p.cells.en13697}if(!x?.value&&row.key==='surface_damage'&&p.cells.ph?.value)x={value:'Compatibilité non renseignée',source:p.cells.ph.source,evidence:p.cells.ph.evidence,kind:p.cells.ph.kind};if(!x?.value)return null;let value=x.value,detail='',source=x.source;const normMap={bactericidal:['en1276','en13697'],fungicidal:['en1650','en13697'],yeasticidal:['en1650','en13697'],virucidal:['en14476']};if(normMap[row.key]&&value==='Oui'){const standards=normMap[row.key].filter(k=>yes(k)&&(k!=='en13697'||explicit(p.cells[k],{bactericidal:'bactéricide',fungicidal:'fongicide',yeasticidal:'levuricide'}[row.key])));value='Oui'+(standards.length?' · '+standards.map(k=>'EN '+k.slice(2)).join(' / '):' · norme non renseignée');source=[...new Set([x.source,...standards.map(k=>p.cells[k].source)].filter(Boolean))].join(' ; ');}
 if(row.key==='usage'&&p.id==='base'&&/Désinfectant professionnel pour surfaces dures/i.test(value)){value='Toute surface sauf inox poli / bois brut';source='Formulation fournie par Hygiène & Combat · 25/10/2026';x={...x,evidence:'Formulation commerciale fournie par Hygiène & Combat.',kind:'manual'}}if(row.key==='surface_damage'){const ph=p.cells.ph?.value;if(ph){const n=numeric(ph);value+=' · pH '+ph+(n!==null&&n>=7&&n<11?' (7≤X<11)':'');source=[...new Set([source,p.cells.ph.source].filter(Boolean))].join(' ; ')}}if(row.key==='surface_damage'&&p.id==='base'){value='Aucune car pH 10,50 (7≤X<11)';source='Formulation fournie par Hygiène & Combat · 25/10/2026';x={...x,evidence:'Déclaration commerciale fournie par Hygiène & Combat ; les données techniques restent consultables dans la vue détaillée.',kind:'manual'}}if(row.key==='white_marks'){const alcohol=p.cells.alcohol?.value||'',without=/sans alcool|pas d[’']alcool|^non$/i.test(alcohol),withAlcohol=/avec alcool|présence d[’']alcool|^oui$/i.test(alcohol)&&!without;if(without)value+=' (absence d’alcool)';else if(withAlcohol)value+=' (présence d’alcool)';} return {...x,value,detail,source,editKey:row.edit}}
 function clientRows(){const p=current();return clientDefinitions().map(d=>{const a=crmValeur(d,state.base,clientValue(state.base,d)),b=crmValeur(d,p,clientValue(p,d));return {...d,a,b,couleurs:crmCouleurs(d,a,b,p),assessment:{choice:'different',label:'',reason:''}}})}
-function clientFootnotes(){return ['* Coût calculé à la dilution désinfectante préconisée par la fiche technique de chaque produit, pour une salle de '+quantity(scenario()?.area??200)+' m² traitée au pulvérisateur. Diluer davantage abaisse le coût, mais supprime l’effet désinfectant.']}
+function clientFootnotes(){return crmModePrix()==='bidon'?[]:['* Coût calculé à la dilution désinfectante préconisée par la fiche technique de chaque produit, pour une salle de '+quantity(scenario()?.area??200)+' m² traitée au pulvérisateur. Diluer davantage abaisse le coût, mais supprime l’effet désinfectant.']}
 function clientCellHTML(p,row,cell){const attrs=row.cost?'data-open-cost':'data-cell="'+esc(row.edit)+'" data-product="'+esc(p?.id||'')+'"';return '<button class="cell client-cell" '+attrs+' title="'+esc(cell?.evidence||'Cliquez pour renseigner la donnée et sa source')+'"><span class="client-value">'+esc(cell?.value||'Non renseigné')+'</span>'+(cell?.detail?'<span class="client-detail">'+esc(cell.detail)+'</span>':'')+'</button>'}
 function render(){if(comparisonMode==='technical'){document.body.classList.remove('client-mode');$('#client-footnotes').innerHTML='';renderTechnical();return}document.body.classList.add('client-mode');const p=current(),all=clientRows(),q=$('#filter').value.toLowerCase();$('#basename').textContent=state.base.name;$('#rivalname').textContent=p?.name||'Choisir un produit';$('#selectproduct').innerHTML='<option value="">Choisir un produit…</option>'+state.products.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>').join('');$('#selectproduct').value=state.selected;$('#categories').innerHTML=['Tous',...new Set(all.map(r=>r.group))].map(t=>'<button data-cat="'+esc(t)+'" class="'+(category===t?'active':'')+'">'+esc(t)+'</button>').join('');const rows=all.filter(r=>(category==='Tous'||category===r.group)&&[r.label,r.hint||''].join(' ').toLowerCase().includes(q));let last='',html='';for(const r of rows){if(last!==r.group){last=r.group;if(!r.parent)html+='<tr class="group"><td colspan="3">'+esc(r.group)+'</td></tr>'}if(r.parent){html+='<tr class="group client-category"><td colspan="3">'+esc(r.label)+'</td></tr>';continue}const choice=r.assessment.choice;html+='<tr class="data-row '+(r.parent?'client-parent ':'')+(r.child?'client-child ':'')+(r.cost?'client-price':'')+'"><td><span class="client-label">'+esc(r.label)+'</span>'+(r.hint?'<small class="client-hint">('+esc(r.hint)+')</small>':'')+'</td><td class="valuecell '+({vert:'favorable',rouge:'unfavorable'}[r.couleurs?.a]||'')+'">'+clientCellHTML(state.base,r,r.a)+crmChoixHtml('a',r)+'</td><td class="valuecell '+({vert:'favorable',rouge:'unfavorable'}[r.couleurs?.b]||'')+'">'+clientCellHTML(p,r,r.b)+crmChoixHtml('b',r)+'</td></tr>'}$('#rows').innerHTML=html||'<tr><td colspan="3" class="empty">Aucune ligne ne correspond à la recherche.</td></tr>';$('#client-footnotes').innerHTML=clientFootnotes().map(t=>'<p>'+esc(t)+'</p>').join('');$('#nfilled').textContent=all.filter(r=>r.b?.value).length;$('#ncommon').textContent=all.filter(r=>r.a?.value&&r.a.value===r.b?.value).length;$('#nunknown').textContent=all.filter(r=>!r.b?.value).length;$('#warning').textContent='Non renseigné = information à compléter. Cliquez sur une réponse pour consulter sa source ou la modifier.';save()}
 function qualify(key){const p=current();if(!p){toast('Sélectionnez un produit à comparer.');return}const d=state.criteria.find(d=>d[0]===key),a=state.base.cells[key],b=p.cells[key],v=assessment(d,a,b,p);modal('Qualifier l’écart · '+d[1],'<p>Les couleurs sont reprises dans le tableau et le PDF client. Justifiez tout avantage pour garder une comparaison vérifiable.</p><label for="assessment-choice">Lecture de la comparaison</label><select id="assessment-choice"><option value="auto">Lecture automatique / neutre</option><option value="base">Avantage Hygiène & Combat</option><option value="rival">Avantage au produit concurrent</option><option value="equal">Comparable sur ce critère</option><option value="different">Différence non classée</option><option value="unknown">À documenter</option></select><label for="assessment-reason">Justification / conditions de comparaison</label><textarea id="assessment-reason" maxlength="700" rows="4" placeholder="Ex. même norme et même spectre, mais temps de contact plus court à dose identique."></textarea><div id="assessment-error" class="export-status" role="status"></div><div class="actions"><button id="cancel-assessment">Annuler</button><button class="primary" id="save-assessment">Enregistrer</button></div>');$('#assessment-choice').value=v.manual?v.choice:'auto';$('#assessment-reason').value=v.reason;$('#cancel-assessment').onclick=closeModal;$('#save-assessment').onclick=()=>{const choice=$('#assessment-choice').value,reason=$('#assessment-reason').value.trim();if(['base','rival','equal'].includes(choice)&&(!a?.value||!b?.value)){$('#assessment-error').textContent='Renseignez les deux produits avant de qualifier un avantage ou une équivalence.';return}if(['base','rival','equal'].includes(choice)&&!reason){$('#assessment-error').textContent='Ajoutez une justification et les conditions de comparaison.';return}p.assessments||={};if(choice==='auto')delete p.assessments[key];else p.assessments[key]={choice,reason,referenceValue:a?.value||'',productValue:b?.value||''};save();render();closeModal()}}
@@ -461,7 +502,8 @@ async function crmPhotosPDF() {
 }
 // Les photos suivent chaque changement de produit affiché
 const crmRenduOrigine = render;
-render = function () { const r = crmRenduOrigine.apply(this, arguments); try { crmMajPhotos(); } catch (e) {} return r; };
+render = function () { const r = crmRenduOrigine.apply(this, arguments); try { crmMajPhotos(); } catch (e) {} try { crmMajModePrix(); } catch (e) {} return r; };
+crmMajModePrix();
 crmMajPhotos();
 
 /* Données partagées : la version la plus récente (serveur ou appareil) l'emporte. */
