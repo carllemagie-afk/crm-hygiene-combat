@@ -748,7 +748,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.11-1751';
+const VERSION_APP = '2026.11.11-1817';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1718,8 +1718,23 @@ function chiffresTel(t) {
   if (/^33\d{9}$/.test(n)) n = '0' + n.slice(2); else if (/^0033\d{9}$/.test(n)) n = '0' + n.slice(4); else if (/^[1-9]\d{8}$/.test(n)) n = '0' + n;
   return n;
 }
-const clientsFiltres = () => S.d.clients.filter(c => correspond(c, filtresCourants(), S.recherche))
-  .sort((a, b) => String(b['Créé le']).localeCompare(String(a['Créé le'])));
+/**
+ * Ordre de la liste Clients : les derniers arrivés en premier, les plus anciens en bas.
+ * Date de création lue pour de vrai (ISO, « 31/10/2026 14:05 », vide = plus ancien), puis, à date égale ou sans date
+ * (import en masse), l'ordre d'arrivée dans le Sheet (une nouvelle fiche est ajoutée en bas).
+ */
+function dateCreation(c) {
+  const v = c['Créé le'];
+  if (!v) return 0;
+  const t = String(v).trim(), fr = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
+  const d = fr ? new Date(+fr[3], fr[2] - 1, +fr[1], +(fr[4] || 0), +(fr[5] || 0)) : new Date(t);
+  return isNaN(d) ? 0 : d.getTime();
+}
+const clientsFiltres = () => {
+  const rang = new Map(S.d.clients.map((c, i) => [c.ID, i]));
+  return S.d.clients.filter(c => correspond(c, filtresCourants(), S.recherche))
+    .sort((a, b) => (dateCreation(b) - dateCreation(a)) || (rang.get(b.ID) - rang.get(a.ID)));
+};
 const nbFiltres = f => Object.keys(f || {}).filter(k => k !== 'exclureTags').length;
 
 // =================================================================== Page Clients
