@@ -748,7 +748,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.14-1600';
+const VERSION_APP = '2026.11.14-1841';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1739,9 +1739,35 @@ function dateCreation(c) {
   const d = fr ? new Date(+fr[3], fr[2] - 1, +fr[1], +(fr[4] || 0), +(fr[5] || 0)) : new Date(t);
   return isNaN(d) ? 0 : d.getTime();
 }
-// À date égale (ex. : 805 fiches importées d'un coup le 25/10), ordre alphabétique de A à Z (avant : ordre du Sheet à l'envers, donc Z → A).
-const clientsFiltres = () => S.d.clients.filter(c => correspond(c, filtresCourants(), S.recherche))
-  .sort((a, b) => (dateCreation(b) - dateCreation(a)) || nomClient(a).localeCompare(nomClient(b), 'fr', { sensitivity: 'base', numeric: true }));
+/**
+ * Ordre de la liste Clients (demande de Carl, 14/11) : le plus RÉCENT en haut = la dernière chose faite avec le client
+ * (appel, e-mail, SMS, note, RDV, commande… ; pas les clics du client), sinon sa date de création.
+ * Le client qu'on vient d'appeler remonte tout de suite en premier. À date égale (import en masse), ordre alphabétique.
+ */
+function dateTexte(v) {
+  if (!v) return 0;
+  if (v instanceof Date) return isNaN(v) ? 0 : v.getTime();
+  const t = String(v).trim(), fr = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
+  const d = fr ? new Date(+fr[3], fr[2] - 1, +fr[1], +(fr[4] || 0), +(fr[5] || 0)) : new Date(t);
+  return isNaN(d) ? 0 : d.getTime();
+}
+function dernieresActivites() {
+  const m = new Map();
+  for (const a of S.d.activites || []) {
+    if (a.Type === 'Clic') continue;
+    const t = dateTexte(a.Date);
+    if (t > (m.get(a.ClientID) || 0)) m.set(a.ClientID, t);
+  }
+  return m;
+}
+const clientsFiltres = () => {
+  const der = dernieresActivites();
+  const recent = c => Math.max(der.get(c.ID) || 0, dateTexte(c['Dernier appel']), dateTexte(c['Dernier contact']), dateCreation(c));
+  return S.d.clients.filter(c => correspond(c, filtresCourants(), S.recherche))
+    .map(c => [c, recent(c)])
+    .sort((a, b) => (b[1] - a[1]) || nomClient(a[0]).localeCompare(nomClient(b[0]), 'fr', { sensitivity: 'base', numeric: true }))
+    .map(x => x[0]);
+};
 const nbFiltres = f => Object.keys(f || {}).filter(k => k !== 'exclureTags').length;
 
 // =================================================================== Page Clients
