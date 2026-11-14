@@ -748,7 +748,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.11-2126';
+const VERSION_APP = '2026.11.14-1600';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1028,7 +1028,15 @@ const garder = (cle, v) => { try { localStorage.setItem(cle, v); } catch (e) { /
  * Appel au serveur (API Apps Script, une requête « simple » sans pré-vérification CORS).
  * Session expirée → écran de connexion ; mot de passe encore provisoire → choix du mot de passe.
  */
-function rpc(fn, args) {
+const RPC_SANS_REESSAI = ['crmDevisQonto', 'crmFactureQonto', 'crmEnvoyerEmail']; // déjà fait avant le verrou : un réessai ferait un doublon
+function rpc(fn, args, essai = 1) {
+  return rpcUneFois(fn, args).catch(e => {
+    // « Expiration de la demande de verrouillage » : le serveur était occupé, rien n'a été fait → on réessaie (2 fois)
+    if (essai < 3 && /verrouill|lock/i.test(e.message || '') && !RPC_SANS_REESSAI.includes(fn)) return new Promise(r => setTimeout(r, 1500 * essai)).then(() => rpc(fn, args, essai + 1));
+    throw e;
+  });
+}
+function rpcUneFois(fn, args) {
   return fetch(API, { method: 'POST', body: JSON.stringify({ fn, args, jeton: S.jeton || '' }) })
     .then(r => { if (!r.ok) throw new Error('Le serveur ne répond pas (' + r.status + '). Réessayez.'); return r.json(); },
       () => { throw new Error(navigator.onLine === false ? 'Pas de connexion internet.' : 'Connexion au serveur impossible. Réessayez.'); })
