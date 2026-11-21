@@ -656,6 +656,30 @@
   .mois-nav { display: flex; align-items: center; gap: 8px; }
   .mois-nav b { font-size: 18px; min-width: 150px; text-align: center; text-transform: capitalize; }
   .mois-nav .depuis { display: block; font-size: 11.5px; font-weight: 500; color: var(--doux); text-transform: none; }
+  .an-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .an-kpi { padding: 14px 16px; } .an-kpi .kpi-chiffre { margin: 6px 0 4px; } .an-kpi .kpi-chiffre b { font-size: 26px; } .an-kpi .kpi-detail { margin-top: 4px; font-size: 12.5px; }
+  .grille-an { display: grid; grid-template-columns: 1fr; gap: 16px; } @media (min-width: 1000px) { .grille-an { grid-template-columns: 1fr 1fr; } }
+  .grille-an > * { min-width: 0; }
+  .graphe-temps { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; align-items: end; height: 170px; }
+  .gt-col { display: flex; flex-direction: column; height: 100%; min-width: 0; }
+  .gt-barres { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 2px; border-bottom: 1px solid var(--trait-fort); }
+  .gt-barres i { flex: 1; max-width: 18px; min-height: 0; border-radius: 4px 4px 0 0; transition: opacity var(--vite); }
+  .gt-barres i:hover { opacity: .75; }
+  .gt-etiq { height: 18px; font-size: 11px; color: var(--pale); text-align: center; white-space: nowrap; padding-top: 4px; }
+  .gt-axe { display: flex; justify-content: space-between; font-size: 11px; color: var(--pale); margin-top: 2px; }
+  .an-legende { display: flex; gap: 12px; font-size: 12.5px; color: var(--doux); } .an-legende i, .table-an .pt { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .barres-h { display: grid; gap: 8px; }
+  .bh { display: grid; grid-template-columns: minmax(90px, 38%) 1fr auto; align-items: center; gap: 10px; font-size: 13px; }
+  .bh-nom { color: var(--doux); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bh-piste { height: 12px; border-radius: 4px; background: var(--acier-50); overflow: hidden; }
+  .bh-piste i { display: block; height: 100%; border-radius: 0 4px 4px 0; background: var(--ardoise-700); }
+  .bh-val { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 12.5px; }
+  .an-table-defile { overflow-x: auto; }
+  .table-an { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .table-an th, .table-an td { padding: 7px 14px; border-top: 1px solid var(--trait); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .table-an thead th { border-top: none; color: var(--doux); font-weight: 600; }
+  .table-an tbody th { text-align: left; font-weight: 500; color: var(--doux); }
+  .table-an td.meilleur { font-weight: 700; color: var(--texte); } .table-an td.an-tot { color: var(--doux); }
   .grille-obj { display: grid; grid-template-columns: 1fr; gap: 16px; }
   @media (min-width: 900px) { .grille-obj { grid-template-columns: 1.3fr 1fr 1fr; } .grille-obj.deux { grid-template-columns: 1.6fr 1fr; } }
   .kpi { padding: 18px 20px; animation: entree var(--doucement) both; }
@@ -751,7 +775,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.21-1603';
+const VERSION_APP = '2026.11.21-1816';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -882,6 +906,7 @@ const ICONES = {
   favori: '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>', rdv: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>', alerte: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/>',
   tache: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 12 2 2 4-4"/>', recharger: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/>',
+  analyse: '<path d="M3 3v18h18"/><path d="M7 15v2M11 10v7M15 12v5M19 6v11"/>',
   objectif: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
   stock: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
   panier: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/>',
@@ -912,10 +937,11 @@ const PAGES = [
   { id: 'agenda', nom: 'Agenda', ico: 'agenda' },
   { id: 'calculateur', nom: 'Calculateur', ico: 'calcul' },
   { id: 'equipe', nom: 'Équipe', ico: 'equipe' }, // dernier du haut, juste au-dessus du trait
+  { id: 'analyse', nom: 'Analyse', ico: 'analyse' },
   { id: 'stock', nom: 'Stock & compta', ico: 'stock' },
   { id: 'reglages', nom: 'Réglages', ico: 'reglages' },
 ];
-const PAGES_BAS = ['objectifs', 'stock', 'reglages']; // ordinateur : en bas du menu, au-dessus du profil
+const PAGES_BAS = ['objectifs', 'analyse', 'stock', 'reglages']; // ordinateur : en bas du menu, au-dessus du profil
 const VUES_BASE = [
   { ID: 'tous', Nom: 'Tous', f: {} },
   { ID: 'mes', Nom: 'Mes clients', f: { owner: '@moi' } },
@@ -1634,7 +1660,7 @@ function afficher() {
   document.body.classList.toggle('nav-large', lire('crm_nav_large', '') === '1'); // grand écran : colonnes qui défilent séparément
   menus();
   const pages = { clients: pageClients, fiche: pageFiche, taches: pageTaches, equipe: pageEquipe, agenda: pageAgenda, emails: pageEmails, sequence: pageSequence, reglages: pageReglages, import: pageImport,
-    objectifs: pageObjectifs, stock: pageStock, calculateur: pageCalculateur };
+    objectifs: pageObjectifs, analyse: pageAnalyse, stock: pageStock, calculateur: pageCalculateur };
   (pages[S.page] || pageClients)();
   memoriser();
 }
@@ -4358,6 +4384,200 @@ function debutPeriode(debutM) {
   return d && !isNaN(d) && d < debutM ? d : debutM;
 }
 const boxActive = (debutBox, debutM) => debutBox && debutBox < plusMois(debutM, 1);
+
+// =================================================================== Page Analyse
+/*
+ * Nos chiffres, pour l'équipe ou pour chacun : appels, décroché, qualification, tags des fiches appelées, ventes et montants,
+ * essais, e-mails, meilleures heures pour appeler, raisons de perte, et le comparatif personne par personne.
+ * Appels = auteur de l'appel ; ventes, essais et réponses = owner de la fiche (comme dans Objectifs).
+ * Les tags sont ceux d'aujourd'hui des fiches appelées sur la période (le CRM ne garde pas l'historique des tags).
+ */
+const AN_PERIODES = [['7', '7 jours'], ['30', '30 jours'], ['mois', 'Ce mois-ci'], ['90', '3 mois'], ['tout', 'Depuis le début']];
+const AN_COULEURS = ['#384a54', '#87a6bb', '#b7a27a', '#7d8f6a']; // 1re personne des Réglages foncée, 2e claire (ordre fixe)
+const couleurPersonne = nom => AN_COULEURS[Math.max(0, S.d.owners.indexOf(nom)) % AN_COULEURS.length];
+const TAG_QUALIFIE = ['Qualifying', 'Qualified', 'Won'];
+
+function periodeAnalyse(cle) {
+  const auj = debutJour(), fin = new Date(auj.getFullYear(), auj.getMonth(), auj.getDate() + 1);
+  if (cle === 'mois') return { de: new Date(auj.getFullYear(), auj.getMonth(), 1), a: fin };
+  if (cle === 'tout') {
+    const t = Math.min(...S.d.activites.filter(x => x.Type === 'Appel').map(x => +new Date(x.Date)).filter(n => !isNaN(n)), +auj);
+    return { de: debutJour(new Date(t)), a: fin };
+  }
+  return { de: new Date(fin.getTime() - Number(cle) * 864e5), a: fin };
+}
+/** « Durée : 2 min 05 » / « Durée : 45 s » → secondes (0 si inconnue). */
+function dureeAppel(x) {
+  const m = String(x.Texte || '').match(/Durée : (?:(\d+) min (\d+)|(\d+) s)/);
+  return !m ? 0 : m[3] ? Number(m[3]) : Number(m[1]) * 60 + Number(m[2]);
+}
+
+function statsAnalyse(de, a, qui) {
+  const dans = x => { const d = new Date(x.Date); return d >= de && d < a; };
+  const proprio = id => (client(id) || {}).Owner || '';
+  const acts = S.d.activites.filter(dans);
+  const appels = acts.filter(x => x.Type === 'Appel' && (!qui || x.Auteur === qui));
+  const joints = appels.filter(x => x['Résultat'] === 'Joint');
+  const durees = joints.map(dureeAppel).filter(s => s > 0);
+  const fiches = [...new Set(appels.map(x => x.ClientID))].map(client).filter(Boolean);
+  const jointes = new Set(joints.map(x => x.ClientID));
+  const tags = {};
+  S.d.tags.forEach(t => { tags[t] = 0; });
+  fiches.forEach(c => { tags[c.Tag || 'New'] = (tags[c.Tag || 'New'] || 0) + 1; });
+  const ventes = ventesEntre(de, a, qui), nouvelles = ventes.filter(x => x.Type !== 'Rachat');
+  const ca = ventes.reduce((t, x) => t + montantCommande(x) + (Number(x['Livraison HT']) || 0), 0);
+  const essais = S.d.commandes.filter(x => estEssai(x) && dans(x) && (!qui || proprio(x.ClientID) === qui));
+  const essaisVendus = essais.filter(e => S.d.commandes.some(y => y.ClientID === e.ClientID && !estEssai(y) && new Date(y.Date) >= new Date(e.Date))).length;
+  const mails = acts.filter(x => x.Type === 'E-mail' && /^(Envoyé|Séquence)/.test(x['Résultat'] || '') && (!qui || (x.Auteur ? x.Auteur === qui : proprio(x.ClientID) === qui)));
+  const reponses = acts.filter(x => x.Type === 'E-mail' && x['Résultat'] === 'Réponse reçue' && (!qui || proprio(x.ClientID) === qui));
+  // Avant une 1re vente : nombre d'appels et jours depuis le 1er appel
+  const avant = nouvelles.map(v => {
+    const ap = S.d.activites.filter(x => x.ClientID === v.ClientID && x.Type === 'Appel' && new Date(x.Date) <= new Date(v.Date));
+    return ap.length ? { n: ap.length, jours: (new Date(v.Date) - Math.min(...ap.map(x => +new Date(x.Date)))) / 864e5 } : null;
+  }).filter(Boolean);
+  const raisons = {};
+  fiches.filter(c => ['Lost', 'Unqualified', 'Exclusion'].includes(c.Tag)).forEach(c => {
+    const k = listeCategories(c['Catégorie'], c.Tag);
+    (k.length ? k : [c.Tag + ' (sans raison)']).forEach(r => { raisons[r] = (raisons[r] || 0) + 1; });
+  });
+  const moy = l => l.length ? l.reduce((t, v) => t + v, 0) / l.length : null;
+  return {
+    appels, joints, fiches, jointes: jointes.size, tags, ventes, nouvelles, ca, essais, essaisVendus, mails, reponses, raisons,
+    joursOuvres: Math.max(joursOuvres(de, new Date(Math.min(+a, Date.now() + 864e5))), 1),
+    duree: moy(durees), appelsParVente: nouvelles.length ? appels.length / nouvelles.length : null,
+    appelsAvantVente: moy(avant.map(x => x.n)), joursAvantVente: moy(avant.map(x => x.jours)),
+    bidons: ventes.reduce((t, x) => t + (Number(x.Bidons) || 0), 0),
+    qualifies: TAG_QUALIFIE.reduce((t, k) => t + (tags[k] || 0), 0),
+    devis: acts.filter(x => /^Devis Qonto envoyé/.test(x['Résultat'] || '') && (!qui || x.Auteur === qui)).length,
+    sms: acts.filter(x => x.Type === 'SMS' && (!qui || x.Auteur === qui)).length,
+    rdv: S.d.rdv.filter(r => { const d = new Date(r['Début']); return d >= de && d < a && (!qui || r.Owner === qui); }).length,
+  };
+}
+
+const pc = (a, b) => b ? Math.round(a / b * 100) : null;
+const pcTxt = (a, b) => pc(a, b) === null ? '—' : pc(a, b) + ' %';
+const un = (n, d) => n === null || n === undefined ? '—' : (Math.round(n * 10 ** (d || 0)) / 10 ** (d || 0)).toLocaleString('fr-FR');
+
+/** Barres verticales dans le temps (jour ou semaine), une barre par personne et par période. */
+function grapheTemps(series, cases, unite) {
+  const max = Math.max(1, ...cases.map((_, i) => Math.max(...series.map(s => s.valeurs[i]))));
+  const pas = Math.ceil(cases.length / 12); // une étiquette sur `pas` pour rester lisible
+  return '<div class="graphe-temps" style="--n:' + cases.length + '">' + cases.map((k, i) =>
+    '<div class="gt-col">' + '<div class="gt-barres">' + series.map(s =>
+      '<i style="height:' + (s.valeurs[i] / max * 100) + '%;background:' + s.couleur + '" title="' + esc(k.titre + ' · ' + s.nom + ' : ' + s.valeurs[i] + ' ' + unite) + '"></i>').join('') + '</div>' +
+      '<span class="gt-etiq">' + (i % pas === 0 ? esc(k.court) : '') + '</span></div>').join('') + '</div>' +
+    '<div class="gt-axe"><span>0</span><span>' + max + ' ' + esc(unite) + ' max.</span></div>';
+}
+/** Barres horizontales : [{ nom, valeur, total?, texte?, couleur? }]. */
+function barresH(lignes, total) {
+  const max = Math.max(1, ...lignes.map(l => l.valeur));
+  return '<div class="barres-h">' + lignes.map(l => '<div class="bh" title="' + esc(l.nom + ' : ' + l.valeur + (total ? ' sur ' + total : '')) + '"><span class="bh-nom">' + esc(l.nom) + '</span>' +
+    '<span class="bh-piste"><i style="width:' + (l.valeur / max * 100) + '%;' + (l.couleur ? 'background:' + l.couleur : '') + '"></i></span>' +
+    '<b class="bh-val">' + esc(l.texte !== undefined ? l.texte : String(l.valeur)) + '</b></div>').join('') + '</div>';
+}
+
+function pageAnalyse() {
+  S.anPer = S.anPer || '30';
+  const qui = S.anQui || '';
+  const { de, a } = periodeAnalyse(S.anPer);
+  const st = statsAnalyse(de, a, qui);
+  const personnes = S.d.owners;
+  const parPersonne = personnes.map(p => ({ nom: p, st: statsAnalyse(de, a, p) }));
+
+  // Cases de temps : par jour jusqu'à 31 jours, sinon par semaine (lundi)
+  const jours = Math.round((a - de) / 864e5), parJour = jours <= 31;
+  const cases = [];
+  for (let d = parJour ? new Date(de) : new Date(de.getFullYear(), de.getMonth(), de.getDate() - ((de.getDay() + 6) % 7)); d < a;) {
+    const fin = parJour ? new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1) : new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7);
+    cases.push({ de: new Date(d), a: fin, court: parJour ? String(d.getDate()) : d.getDate() + '/' + (d.getMonth() + 1),
+      titre: parJour ? d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }) : 'Semaine du ' + d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) });
+    d = fin;
+  }
+  const dansCase = (x, k) => { const d = new Date(x.Date); return d >= k.de && d < k.a; };
+  const qui2 = qui ? [qui] : personnes;
+  const serieAppels = qui2.map(p => ({ nom: p.split(' ')[0], couleur: couleurPersonne(p), valeurs: cases.map(k => st.appels.filter(x => x.Auteur === p && dansCase(x, k)).length) }));
+  const autres = !qui && st.appels.some(x => !personnes.includes(x.Auteur));
+  if (autres) serieAppels.push({ nom: 'Autres', couleur: '#cfd8dd', valeurs: cases.map(k => st.appels.filter(x => !personnes.includes(x.Auteur) && dansCase(x, k)).length) });
+  const serieVentes = qui2.map(p => ({ nom: p.split(' ')[0], couleur: couleurPersonne(p), valeurs: cases.map(k => st.ventes.filter(x => (client(x.ClientID) || {}).Owner === p && dansCase(x, k)).length) }));
+  const legende = s => s.length > 1 ? '<div class="an-legende">' + s.map(x => '<span><i style="background:' + x.couleur + '"></i>' + esc(x.nom) + '</span>').join('') + '</div>' : '';
+
+  // Meilleurs moments : taux de décroché par heure et par jour
+  const heures = Array.from({ length: 13 }, (_, i) => i + 8).map(h => {
+    const l = st.appels.filter(x => new Date(x.Date).getHours() === h);
+    return { nom: h + ' h', valeur: pc(l.filter(x => x['Résultat'] === 'Joint').length, l.length) || 0, n: l.length };
+  }).filter(h => h.n);
+  const joursSem = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'].map((nom, i) => {
+    const l = st.appels.filter(x => (new Date(x.Date).getDay() + 6) % 7 === i);
+    return { nom, valeur: pc(l.filter(x => x['Résultat'] === 'Joint').length, l.length) || 0, n: l.length };
+  }).filter(j => j.n);
+  const tauxH = l => barresH(l.map(x => ({ nom: x.nom, valeur: x.valeur, texte: x.valeur + ' % · ' + x.n + ' appel' + (x.n > 1 ? 's' : '') })));
+
+  const kpi = (titre, valeur, detail, aide) => '<div class="carte kpi an-kpi"' + (aide ? ' title="' + esc(aide) + '"' : '') + '><span class="etiquette">' + titre + '</span>' +
+    '<div class="kpi-chiffre"><b>' + valeur + '</b></div><div class="kpi-detail">' + detail + '</div></div>';
+  const nf = st.fiches.length;
+
+  // Comparatif personne par personne
+  const lignesComp = [
+    ['Appels', s => s.appels.length, 'n'], ['Appels / jour ouvré', s => s.appels.length / s.joursOuvres, 'n1'],
+    ['Taux de décroché', s => pc(s.joints.length, s.appels.length), '%'], ['Durée moyenne (joint)', s => s.duree, 'duree'],
+    ['Fiches appelées', s => s.fiches.length, 'n'], ['Taux de qualification', s => pc(s.qualifies, s.fiches.length), '%'],
+    ['Qualified', s => s.tags.Qualified || 0, 'n'], ['Unqualified', s => s.tags.Unqualified || 0, 'n-'], ['Exclusion', s => s.tags.Exclusion || 0, 'n-'], ['Lost', s => s.tags.Lost || 0, 'n-'],
+    ['Won (fiches appelées)', s => s.tags.Won || 0, 'n'], ['Taux de Won', s => pc(s.tags.Won || 0, s.fiches.length), '%'],
+    ['Ventes', s => s.ventes.length, 'n'], ['Montant des ventes', s => s.ca, '€'], ['Panier moyen', s => s.ventes.length ? s.ca / s.ventes.length : null, '€'],
+    ['Appels par vente', s => s.appelsParVente, 'n1-'], ['Bidons d’essai', s => s.essais.reduce((t, x) => t + (Number(x.Bidons) || 0), 0), 'n'],
+    ['E-mails envoyés', s => s.mails.length, 'n'], ['Devis Qonto envoyés', s => s.devis, 'n'], ['RDV', s => s.rdv, 'n'],
+  ];
+  const fmt = (v, f) => v === null || v === undefined || isNaN(v) ? '—' : f === '%' ? v + ' %' : f === '€' ? euros(v) : f === 'duree' ? dureeTexte(Math.round(v)) : f.startsWith('n1') ? un(v, 1) : un(v);
+  const tableComp = '<div class="an-table-defile"><table class="table-an"><thead><tr><th></th>' + parPersonne.map(p => '<th><span class="pt" style="background:' + couleurPersonne(p.nom) + '"></span>' + esc(p.nom.split(' ')[0]) + '</th>').join('') + '<th>Équipe</th></tr></thead><tbody>' +
+    lignesComp.map(([nom, f, type]) => {
+      const vals = parPersonne.map(p => f(p.st)), nums = vals.filter(v => v !== null && !isNaN(v));
+      const meilleur = nums.length > 1 && new Set(nums).size > 1 ? (type.endsWith('-') ? Math.min(...nums) : Math.max(...nums)) : null;
+      return '<tr><th>' + esc(nom) + '</th>' + vals.map(v => '<td' + (v === meilleur ? ' class="meilleur"' : '') + '>' + fmt(v, type.replace('-', '')) + '</td>').join('') + '<td class="an-tot">' + fmt(f(statsAnalyse(de, a, '')), type.replace('-', '')) + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+
+  const entonnoir = [
+    { nom: 'Fiches appelées', valeur: nf },
+    { nom: 'Décrochées (au moins une fois)', valeur: st.jointes },
+    { nom: 'Qualifying, Qualified ou Won', valeur: st.qualifies },
+    { nom: 'Qualified ou Won', valeur: (st.tags.Qualified || 0) + (st.tags.Won || 0) },
+    { nom: 'Won', valeur: st.tags.Won || 0 },
+  ].map(l => Object.assign(l, { texte: l.valeur + (nf ? ' · ' + pcTxt(l.valeur, nf) : ''), couleur: 'var(--ardoise-700)' }));
+  const ordreTags = ['New', 'Qualifying', 'Qualified', 'Won', 'Unqualified', 'Lost', 'Exclusion'];
+  const tagsL = ordreTags.concat(Object.keys(st.tags).filter(t => !ordreTags.includes(t))).filter(t => st.tags[t]).map(t => ({ nom: t, valeur: st.tags[t], texte: st.tags[t] + ' · ' + pcTxt(st.tags[t], nf),
+    couleur: { Won: 'var(--ok)', Lost: 'var(--danger)', Exclusion: '#8e9ba1', Unqualified: '#b9c4ca', New: '#cfd8dd', Qualified: 'var(--acier-600)', Qualifying: 'var(--acier)' }[t] }));
+  const raisonsL = Object.keys(st.raisons).sort((x, y) => st.raisons[y] - st.raisons[x]).slice(0, 10).map(r => ({ nom: r, valeur: st.raisons[r], couleur: '#8e9ba1' }));
+
+  $('#page').innerHTML = '<div class="page analyse">' +
+    '<div class="entete"><div><h1>Analyse</h1><p>Nos chiffres du ' + esc(de.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })) + ' au ' + esc(new Date(a - 864e5).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })) +
+      '. Appels comptés pour la personne qui appelle ; ventes, essais et réponses pour l’owner de la fiche ; tags = ceux d’aujourd’hui des fiches appelées sur la période.</p></div></div>' +
+    '<div class="barre-periode"><div class="segment">' + AN_PERIODES.map(([v, n]) => '<button data-anper="' + v + '" class="' + (S.anPer === v ? 'actif' : '') + '">' + n + '</button>').join('') + '</div>' +
+      '<div class="segment">' + [['', 'Équipe'], ...personnes.map(o => [o, o.split(' ')[0]])].map(([v, n]) => '<button data-anqui="' + esc(v) + '" class="' + (qui === v ? 'actif' : '') + '">' + esc(n) + '</button>').join('') + '</div></div>' +
+    '<div class="an-kpis">' +
+      kpi('Appels', st.appels.length, '<span><b>' + un(st.appels.length / st.joursOuvres, 1) + '</b> / jour ouvré</span><span>Durée moy. <b>' + (st.duree ? dureeTexte(Math.round(st.duree)) : '—') + '</b></span>') +
+      kpi('Taux de décroché', pcTxt(st.joints.length, st.appels.length), '<span><b>' + st.joints.length + '</b> appels joints</span><span><b>' + st.jointes + '</b> / ' + nf + ' fiches jointes</span>', 'Appels « Joint » sur tous les appels') +
+      kpi('Taux de qualification', pcTxt(st.qualifies, nf), '<span><b>' + (st.tags.Qualifying || 0) + '</b> Qualifying</span><span><b>' + (st.tags.Qualified || 0) + '</b> Qualified</span>', 'Fiches appelées aujourd’hui en Qualifying, Qualified ou Won') +
+      kpi('Taux de Won', pcTxt(st.tags.Won || 0, nf), '<span><b>' + (st.tags.Won || 0) + '</b> Won sur ' + nf + ' fiches appelées</span>') +
+      kpi('Ventes', st.ventes.length, '<span><b>' + euros(st.ca) + '</b> HT</span><span>' + st.nouvelles.length + ' nouv. · ' + (st.ventes.length - st.nouvelles.length) + ' rachats</span>') +
+      kpi('Panier moyen', st.ventes.length ? euros(st.ca / st.ventes.length) : '—', '<span><b>' + st.bidons + '</b> bidons vendus</span>') +
+      kpi('Appels par vente', un(st.appelsParVente, 1), '<span>Avant une 1re vente : <b>' + un(st.appelsAvantVente, 1) + '</b> appels, <b>' + un(st.joursAvantVente, 0) + '</b> j</span>', 'Appels de la période ÷ nouvelles ventes de la période') +
+      kpi('Unqualif. · Exclu. · Lost', (st.tags.Unqualified || 0) + ' · ' + (st.tags.Exclusion || 0) + ' · ' + (st.tags.Lost || 0), '<span>' + pcTxt((st.tags.Unqualified || 0) + (st.tags.Exclusion || 0) + (st.tags.Lost || 0), nf) + ' des fiches appelées</span>') +
+      kpi('Bidons d’essai', st.essais.reduce((t, x) => t + (Number(x.Bidons) || 0), 0), '<span><b>' + st.essais.length + '</b> essai(s)</span><span>→ vente : <b>' + pcTxt(st.essaisVendus, st.essais.length) + '</b></span>') +
+      kpi('E-mails', st.mails.length, '<span><b>' + st.reponses.length + '</b> réponses</span><span>' + st.devis + ' devis · ' + st.sms + ' SMS · ' + st.rdv + ' RDV</span>') +
+    '</div>' +
+    '<div class="grille-an">' +
+      '<div class="carte"><div class="carte-tete"><h2>Appels ' + (parJour ? 'par jour' : 'par semaine') + '</h2>' + legende(serieAppels) + '</div><div class="carte-corps">' + grapheTemps(serieAppels, cases, 'appels') + '</div></div>' +
+      '<div class="carte"><div class="carte-tete"><h2>Ventes ' + (parJour ? 'par jour' : 'par semaine') + '</h2>' + legende(serieVentes) + '</div><div class="carte-corps">' + grapheTemps(serieVentes, cases, 'ventes') + '</div></div>' +
+      '<div class="carte"><div class="carte-tete"><h2>Entonnoir</h2><span class="pale petit">fiches appelées sur la période</span></div><div class="carte-corps">' + barresH(entonnoir) + '</div></div>' +
+      '<div class="carte"><div class="carte-tete"><h2>Où en sont ces fiches</h2><span class="pale petit">tag actuel</span></div><div class="carte-corps">' + (tagsL.length ? barresH(tagsL, nf) : '<p class="pale">Aucune fiche appelée.</p>') + '</div></div>' +
+      '<div class="carte"><div class="carte-tete"><h2>Quand ça décroche</h2><span class="pale petit">taux de décroché par heure</span></div><div class="carte-corps">' + (heures.length ? tauxH(heures) : '<p class="pale">Pas encore d’appels.</p>') + '</div></div>' +
+      '<div class="carte"><div class="carte-tete"><h2>Par jour de la semaine</h2><span class="pale petit">taux de décroché</span></div><div class="carte-corps">' + (joursSem.length ? tauxH(joursSem) : '<p class="pale">Pas encore d’appels.</p>') +
+        '</div></div>' +
+      '<div class="carte"><div class="carte-tete"><h2>Pourquoi ça ne passe pas</h2><span class="pale petit">raisons Lost · Unqualified · Exclusion</span></div><div class="carte-corps">' + (raisonsL.length ? barresH(raisonsL) : '<p class="pale">Aucune fiche perdue sur la période.</p>') + '</div></div>' +
+      '<div class="carte"><div class="carte-tete"><h2>' + esc(personnes.map(p => p.split(' ')[0]).join(' vs ')) + '</h2><span class="pale petit">meilleur chiffre en gras</span></div>' + tableComp + '</div>' +
+    '</div></div>';
+  $$('[data-anper]').forEach(b => b.onclick = () => { S.anPer = b.dataset.anper; pageAnalyse(); });
+  $$('[data-anqui]').forEach(b => b.onclick = () => { S.anQui = b.dataset.anqui; pageAnalyse(); });
+}
 
 // =================================================================== Page Objectifs
 function pageObjectifs() {
