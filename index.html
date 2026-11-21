@@ -645,6 +645,7 @@
   .rachat input:hover { border-color: var(--trait-fort); }
   .ligne-cmd { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--trait); cursor: pointer; color: var(--doux); }
   .ligne-cmd b { color: var(--texte); font-weight: 600; font-size: 14px; } .ligne-cmd .bulle { width: 30px; height: 30px; } .ligne-cmd:hover b { color: var(--ardoise-700); }
+  .bulle.Essai { background: var(--attention-50); color: var(--attention); }
   .total-cmd { display: flex; align-items: baseline; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--acier-50); }
   .total-cmd b { font-size: 18px; } .total-cmd span:first-child { color: var(--doux); flex: 1; }
   body.deconnecte main#page { max-width: none; }
@@ -748,7 +749,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.14-1841';
+const VERSION_APP = '2026.11.21-1535';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -857,6 +858,8 @@ function fenetreDevisQonto(c, facture) {
 const ICONES = {
   clients: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
   micro: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/>',
+  cadeau: '<path d="M20 12v9H4v-9M2 7h20v5H2zM12 21V7M12 7H7.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z"/>',
+  fusion: '<path d="M6 3v6a6 6 0 0 0 6 6h0a6 6 0 0 1 6 6M18 3v6a6 6 0 0 1-6 6"/><path d="M12 15v6"/>',
   sms: '<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.6-4.4A8 8 0 0 1 3 11.5 8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/><path d="M8 10h8M8 13.5h5"/>',
   equipe: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>',
   taches: '<path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
@@ -1143,7 +1146,7 @@ const telAffiche = t => { const n = telNettoye(t); return /^\+33\d{9}$/.test(n) 
 function remplacer(liste, objet) { const i = liste.findIndex(x => x.ID === objet.ID); if (i >= 0) liste[i] = objet; else liste.push(objet); }
 /** Client renvoyé par le serveur, avec éventuellement la commande, la tâche et l'activité créées en même temps. */
 function majClient(c) {
-  if (c.__commande || c.Tag === 'Lost') fermerRachats(c.ID, c.__tache && c.__tache.ID); // le serveur a clos les anciennes tâches de rachat
+  if ((c.__commande && !estEssai(c.__commande)) || c.Tag === 'Lost') fermerRachats(c.ID, c.__tache && c.__tache.ID); // le serveur a clos les anciennes tâches de rachat
   if (c.__commande) remplacer(S.d.commandes, c.__commande);
   if (c.__tache) remplacer(S.d.taches, c.__tache);
   if (c.__activite) remplacer(S.d.activites, c.__activite);
@@ -1181,7 +1184,7 @@ function doublonsDe(c) {
   [c.Email, c['Email 2']].map(e => String(e || '').trim().toLowerCase()).filter(e => e.includes('@')).forEach(e => (parCle['e' + e] || []).forEach(id => { if (id !== c.ID) vus[id] = vus[id] || 'même e-mail'; }));
   return Object.keys(vus).map(id => ({ client: client(id), raison: vus[id] })).filter(x => x.client);
 }
-const fermerRachats = (clientId, sauf) => S.d.taches.forEach(t => { if (t.ClientID === clientId && !t.Faite && t.ID !== sauf && /^Rachat ·/.test(t.Titre)) t.Faite = true; });
+const fermerRachats = (clientId, sauf) => S.d.taches.forEach(t => { if (t.ClientID === clientId && !t.Faite && t.ID !== sauf && /^(Rachat|Essai) ·/.test(t.Titre)) t.Faite = true; });
 const inscriptionActive = clientId => S.d.inscriptions.find(i => i.ClientID === clientId && i.Statut === 'En cours');
 /** Tag + raisons (« Lost better pricing +1 » ; toutes dans l'infobulle). */
 const tagHtml = (t, cat) => {
@@ -2011,7 +2014,7 @@ function pageFiche() {
             section('Champs personnalisés', perso.map(k => prop(k)).join('') + '<button class="lien-ajout" id="ajoutChamp">' + ico('plus') + 'Ajouter un champ</button>', perso.length > 0) +
           '</div>' +
           '<div style="padding:12px 20px;border-top:1px solid var(--trait)" class="rangee"><span class="pale petit">Créée le ' + esc(fmtDate(c['Créé le'])) + '</span><span class="espace"></span>' +
-            '<button class="btn fantome mini danger" id="suppr">' + ico('poubelle') + 'Supprimer</button></div>' +
+            '<button class="btn fantome mini" id="fusionAvec">' + ico('fusion') + 'Fusionner avec…</button><button class="btn fantome mini danger" id="suppr">' + ico('poubelle') + 'Supprimer</button></div>' +
         '</div></section>' +
       '<section class="col-centre' + (S.ongletFiche === 'activite' ? ' visible' : '') + '">' + carteActivite(c) + '</section>' +
       '<section class="col-droite' + (S.ongletFiche === 'suivi' ? ' visible' : '') + '">' + carteComparatifs(c) + carteConso(c) + carteCommandes(c) + carteSequence(c, ins) + carteAVenir(c) + '</section>' +
@@ -2027,12 +2030,21 @@ function pageFiche() {
       if (ville && ville !== String(client(c.ID).Ville || '').trim()) { i.defaultValue = i.value; return enregistrerChamps(c.ID, { Adresse: i.value, Ville: ville }, i); }
     }
     if ('defaultValue' in i) i.defaultValue = i.value; // enregistré : le champ n'est plus « en cours de saisie »
+    const avant = new Set(doublonsDe(client(c.ID)).map(x => x.client.ID));
     enregistrerChamp(c.ID, i.dataset.champ, i.type === 'tel' ? telAffiche(i.value) : i.value, i); // numéro gardé avec son 0
+    // Numéro ou e-mail déjà sur une autre fiche : on le dit tout de suite et on propose de fusionner
+    if (['Téléphone', 'Téléphone 2', 'Email', 'Email 2'].includes(i.dataset.champ)) {
+      S.doublons = null;
+      const nouveau = doublonsDe(client(c.ID)).find(x => !avant.has(x.client.ID));
+      if (nouveau) confirmer('Doublon : « ' + esc(nomClient(nouveau.client)) + ' »', 'Ce ' + (/Email/.test(i.dataset.champ) ? 'e-mail' : 'numéro') + ' est déjà sur la fiche <b>' + esc(nomClient(nouveau.client)) +
+        '</b>. C’est la même salle ? Fusionnez les deux fiches : rien n’est perdu (historique, commandes, notes).', 'Fusionner…').then(ok => ok && fenetreFusion(client(c.ID), nouveau.client));
+    }
   });
   $$('[data-tag]').forEach(b => b.onclick = () => {
     const tag = b.dataset.tag;
     if (tag === c.Tag) return;
-    if (tag === 'Lost' && commandesDe(c.ID).length) return fenetreChurn(c);
+    if (tag === 'Lost' && commandesDe(c.ID).some(x => !estEssai(x))) return fenetreChurn(c);
+    if (tag === 'Won') return fenetreCommande(c); // un Won = une vente : bidons, prix, remise, livraison (le tag suit l'enregistrement)
     // La catégorie ne suit que si elle existe pour le nouveau tag.
     S.raisons = categoriesDe(tag).length ? { cle: 'fiche-' + c.ID, q: '' } : null; // nouveau tag : ses raisons s'ouvrent pour préciser tout de suite
     enregistrerChamps(c.ID, { Tag: tag, 'Catégorie': categoriesPour(tag, c['Catégorie'], c.Tag) }, null, true);
@@ -2069,6 +2081,7 @@ function pageFiche() {
   brancherComparatifs(c);
   $('#ajoutChamp').onclick = () => demanderTexte('Nouveau champ', 'Nom du champ (visible sur toutes les fiches)', 'Ex. : Nombre d’adhérents').then(nom =>
     appel('crmAjouterChamp', nom).then(ch => { S.d.champs = ch; pageFiche(); toast('Champ « ' + nom + ' » ajouté'); }));
+  $('#fusionAvec').onclick = () => fenetreChoixFusion(c);
   $('#suppr').onclick = () => confirmer('Supprimer ' + esc(nomClient(c)) + ' ?', 'La fiche sera supprimée du CRM (sa séquence éventuelle est arrêtée). Cette action est définitive.', 'Supprimer')
     .then(ok => { if (!ok) return; S.d.clients = S.d.clients.filter(x => x.ID !== c.ID); aller('clients'); toast('Fiche supprimée'); enFond(appel('crmSupprimerClient', c.ID)); });
   const arret = $('#arretSeq');
@@ -2167,6 +2180,25 @@ function carteActivite(c) {
 }
 
 /** Fusion de deux fiches : on choisit celle qui reste, l'autre la complète puis disparaît. */
+/** « Fusionner avec… » : chercher l'autre fiche (nom, ville, numéro, e-mail), puis choisir celle qui reste. */
+function fenetreChoixFusion(c) {
+  const f = fenetre({ titre: 'Fusionner « ' + esc(nomClient(c)) + ' » avec…', corps:
+    '<label class="champ"><span>Autre fiche</span><input type="search" id="fcQ" placeholder="Nom de la salle, ville, numéro, e-mail…" autocomplete="off"></label><div id="fcListe"></div>' });
+  const norm = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const dessiner = () => {
+    const q = norm(f.$('#fcQ').value.trim()), chiffres = q.replace(/\D/g, '');
+    const proposes = doublonsDe(c).map(x => x.client);
+    const liste = (q ? S.d.clients.filter(x => x.ID !== c.ID && (norm([nomClient(x), x.Salle, x.Nom, x['Prénom'], x.Ville, x.Email, x['Email 2']].join(' ')).includes(q) ||
+      (chiffres.length >= 4 && [x['Téléphone'], x['Téléphone 2']].some(t => String(t || '').replace(/\D/g, '').includes(chiffres.replace(/^0/, '')))))) : proposes).slice(0, 12);
+    f.$('#fcListe').innerHTML = (!q && proposes.length ? '<p class="pale petit">Doublons possibles :</p>' : '') + (liste.length ? liste.map(x => '<button type="button" class="ligne-cmd" style="width:100%;text-align:left" data-fc="' + x.ID + '">' + avatar(nomClient(x), 's') +
+      '<div style="flex:1;min-width:0"><b>' + esc(nomClient(x)) + '</b><div class="doux petit">' + esc([x.Ville, telAffiche(x['Téléphone']), x.Email].filter(Boolean).join(' · ')) + '</div></div>' + tagHtml(x.Tag, x['Catégorie']) + '</button>').join('')
+      : '<p class="pale petit">' + (q ? 'Aucune fiche trouvée.' : 'Tapez le nom de l’autre fiche.') + '</p>');
+    f.el.querySelectorAll('[data-fc]').forEach(b => b.onclick = () => { f.fermer(); fenetreFusion(client(c.ID), client(b.dataset.fc)); });
+  };
+  f.$('#fcQ').oninput = dessiner;
+  dessiner();
+}
+
 function fenetreFusion(a, b) {
   if (!a || !b) return;
   const score = c => Object.values(c).filter(v => v !== '' && v != null).length + commandesDe(c.ID).length * 5 + S.d.activites.filter(x => x.ClientID === c.ID).length;
@@ -2201,35 +2233,48 @@ function fenetreModifActivite(a) {
 // =================================================================== Commandes (ventes, rachats, churn)
 const commandesDe = clientId => S.d.commandes.filter(x => x.ClientID === clientId).sort((a, b) => String(b.Date).localeCompare(String(a.Date)));
 const euros = (n, dec) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: dec ?? 0, maximumFractionDigits: dec ?? 0 }) + ' €';
-const montantCommande = x => (Number(x.Bidons) || 0) * (Number(x['Prix bidon HT']) || 0);
+const montantCommande = x => (Number(x.Bidons) || 0) * (Number(x['Prix bidon HT']) || 0) - (Number(x['Remise HT']) || 0); // remise déduite
+/** Bidon d'essai offert : sort du stock, coûte (bidon + envoi), mais n'est ni une vente ni un paiement attendu. */
+const estEssai = x => x.Type === 'Essai';
 const montantTTC = x => (montantCommande(x) + (Number(x['Livraison HT']) || 0)) * (1 + (Number(S.d.reglages.TVA) || 0) / 100);
 const pucePaiement = x => x['Payée le'] ? '<span class="puce vert" title="' + (x.TransactionID ? 'Virement reçu sur Qonto' : 'Paiement saisi à la main') + '">' + ico('ok') + 'Payée ' + esc(fmtDate(x['Payée le'])) + '</span>'
   : '<span class="puce orange">À encaisser</span>';
 
 function carteCommandes(c) {
-  const cmds = commandesDe(c.ID);
+  const toutes = commandesDe(c.ID), cmds = toutes.filter(x => !estEssai(x)), essais = toutes.filter(estEssai);
   const rachat = c['Date rachat'] ? new Date(c['Date rachat']) : null;
   const du = rachat && rachat <= new Date(Date.now() + 7 * 864e5) && c.Tag === 'Won';
+  const boutons = '<div class="rangee" style="gap:6px"><button class="btn mini" id="cmEssai" title="Bidon d’essai : offrir un ou plusieurs bidons">' + ico('cadeau') + 'Essai</button>' +
+    '<button class="btn mini principal" id="cmNouvelle">' + ico('plus') + (cmds.length ? 'Commande' : 'Vente') + '</button></div>';
+  const ligneEssai = x => '<div class="ligne-cmd" data-cmd="' + x.ID + '"><span class="bulle Essai">' + ico('cadeau') + '</span><div style="flex:1;min-width:0"><b>Bidon d’essai · ' + esc(x.Bidons) + ' bidon' + (Number(x.Bidons) > 1 ? 's' : '') + '</b>' +
+    '<div class="doux petit">' + esc(fmtDate(x.Date)) + ' · offert' + (x.Notes ? ' · ' + esc(x.Notes) : '') + '</div></div><span class="puce">Essai</span>' + ico('crayon') + '</div>';
+  const ligneVente = x => {
+    const remise = Number(x['Remise HT']) || 0, offerte = !(Number(x['Livraison HT']) > 0);
+    return '<div class="ligne-cmd" data-cmd="' + x.ID + '"><span class="bulle Commande">' + ico('panier') + '</span><div style="flex:1;min-width:0"><b>' + esc(x.Type) + ' · ' + esc(x.Bidons) + ' bidons</b>' +
+      '<div class="doux petit">' + esc(fmtDate(x.Date)) + ' · ' + euros(montantCommande(x), 2) + ' HT' + (remise ? ' · remise ' + euros(remise, 2) : '') + (offerte ? ' · livraison offerte' : '') + '</div></div>' + pucePaiement(x) + ico('crayon') + '</div>';
+  };
   if (!cmds.length && c.Tag !== 'Won') {
-    return '<div class="carte"><div class="carte-tete"><h2>Commandes</h2><button class="btn mini" id="cmNouvelle">' + ico('panier') + 'Vente</button></div>' +
-      '<div class="carte-corps doux petit">Pas encore client. Passer en <b>Won</b> enregistre automatiquement la première commande.</div></div>';
+    return '<div class="carte"><div class="carte-tete"><h2>Commandes</h2>' + boutons + '</div>' +
+      '<div class="carte-corps">' + (essais.length ? essais.map(ligneEssai).join('') : '') +
+      '<div class="doux petit"' + (essais.length ? ' style="margin-top:8px"' : '') + '>Pas encore client. « Vente » (ou le tag <b>Won</b>) enregistre la commande : bidons, prix, remise, livraison.</div></div></div>';
   }
   const total = cmds.reduce((t, x) => t + montantCommande(x), 0);
-  return '<div class="carte"><div class="carte-tete"><h2>Commandes</h2><button class="btn mini principal" id="cmNouvelle">' + ico('plus') + 'Commande</button></div>' +
+  return '<div class="carte"><div class="carte-tete"><h2>Commandes</h2>' + boutons + '</div>' +
     '<div class="carte-corps">' +
       '<div class="rachat' + (du ? ' du' : '') + '"><div><span class="etiquette">Rachat estimé</span><input type="date" id="cmRachat" value="' + (rachat ? dateLocale(rachat) : '') + '"></div>' +
         (c.Tag === 'Won' ? '<button class="btn mini fantome danger" id="cmChurn">Ne recommande pas</button>' : '<span class="puce">' + esc(c.Tag === 'Lost' ? 'Churn' : c.Tag) + '</span>') + '</div>' +
       (du ? '<div class="rangee" style="margin:10px 0 2px"><span class="puce orange">' + ico('tel') + 'À appeler pour le rachat</span><button class="btn mini" id="cmSeqRachat">' + ico('sequence') + 'Pas de réponse → séquence</button></div>' : '') +
-      '<div class="petit doux" style="margin:12px 0 6px">' + cmds.length + ' commande(s) · ' + euros(total) + ' HT</div>' +
-      cmds.map(x => '<div class="ligne-cmd" data-cmd="' + x.ID + '"><span class="bulle Commande">' + ico('panier') + '</span><div style="flex:1;min-width:0"><b>' + esc(x.Type) + ' · ' + esc(x.Bidons) + ' bidons</b>' +
-        '<div class="doux petit">' + esc(fmtDate(x.Date)) + ' · ' + euros(montantCommande(x), 2) + ' HT</div></div>' + pucePaiement(x) + ico('crayon') + '</div>').join('') +
+      '<div class="petit doux" style="margin:12px 0 6px">' + cmds.length + ' commande(s) · ' + euros(total) + ' HT' + (essais.length ? ' · ' + essais.reduce((t, x) => t + (Number(x.Bidons) || 0), 0) + ' bidon(s) d’essai offert(s)' : '') + '</div>' +
+      toutes.map(x => estEssai(x) ? ligneEssai(x) : ligneVente(x)).join('') +
     '</div></div>';
 }
 
 function brancherCommandes(c) {
   const n = $('#cmNouvelle');
   if (n) n.onclick = () => fenetreCommande(c);
-  $$('[data-cmd]').forEach(l => l.onclick = () => fenetreCommande(c, S.d.commandes.find(x => x.ID === l.dataset.cmd)));
+  const es = $('#cmEssai');
+  if (es) es.onclick = () => fenetreCommande(c, null, true);
+  $$('[data-cmd]').forEach(l => l.onclick = () => { const x = S.d.commandes.find(y => y.ID === l.dataset.cmd); fenetreCommande(c, x, estEssai(x)); });
   const r = $('#cmRachat');
   if (r) r.onchange = () => r.value && enregistrerChamp(c.ID, 'Date rachat', new Date(r.value + 'T10:00').toISOString(), r);
   const ch = $('#cmChurn');
@@ -2238,35 +2283,61 @@ function brancherCommandes(c) {
   if (sq) sq.onclick = () => fenetreSequence([c.ID]);
 }
 
-function fenetreCommande(c, x) {
+/**
+ * Vente (ou commande existante) : bidons, prix, remise, livraison facturée ou offerte → le client passe en Won.
+ * `essai` : bidon(s) d'essai offert(s) → sortie de stock, le client passe en Qualified · « Qualified bidon d'essai », rappel dans 7 jours.
+ */
+function fenetreCommande(c, x, essai) {
   const r = S.d.reglages;
-  const v = x || { Bidons: r.BIDONS_PAR_COMMANDE, 'Prix bidon HT': r.PRIX_BIDON_HT, 'Livraison HT': r.LIVRAISON_CLIENT_HT, Date: new Date().toISOString(), Notes: '' };
-  const type = x ? x.Type : commandesDe(c.ID).length ? 'Rachat' : 'Nouvelle vente';
-  const f = fenetre({ titre: (x ? 'Commande · ' : type + ' · ') + esc(nomClient(c)), corps:
+  const v = x || { Bidons: essai ? 1 : r.BIDONS_PAR_COMMANDE, 'Prix bidon HT': r.PRIX_BIDON_HT, 'Livraison HT': r.LIVRAISON_CLIENT_HT, 'Remise HT': 0, Date: new Date().toISOString(), Notes: '' };
+  const type = essai ? 'Bidon d’essai' : x ? x.Type : commandesDe(c.ID).some(y => !estEssai(y)) ? 'Rachat' : 'Nouvelle vente';
+  const offerte = x && !essai ? !(Number(x['Livraison HT']) > 0) : false;
+  const f = fenetre({ titre: (x ? (essai ? 'Bidon d’essai · ' : 'Commande · ') : type + ' · ') + esc(nomClient(c)), corps: essai ?
+    '<div class="grille-2"><label class="champ"><span>Bidons offerts</span><input type="number" id="cmB" min="1" step="1" value="' + esc(v.Bidons) + '"></label>' +
+    '<label class="champ"><span>Date</span><input type="date" id="cmD" value="' + dateLocale(new Date(v.Date)) + '"></label></div>' +
+    '<label class="champ"><span>Notes</span><input type="text" id="cmN" value="' + esc(v.Notes) + '" placeholder="Remis en main propre, envoyé par GLS…"></label>' +
+    (!x ? '<p class="pale petit" style="margin:8px 0 0">Gratuit : sort du stock, ne compte pas comme vente. Le client passe en <b>Qualified · bidon d’essai</b> et une tâche « rappeler » est créée dans 7 jours.</p>' : '')
+    :
     '<div class="grille-2"><label class="champ"><span>Bidons (1 carton = 4)</span><input type="number" id="cmB" min="1" step="1" value="' + esc(v.Bidons) + '"></label>' +
     '<label class="champ"><span>Date</span><input type="date" id="cmD" value="' + dateLocale(new Date(v.Date)) + '"></label>' +
     '<label class="champ"><span>Prix du bidon (€ HT)</span><input type="number" id="cmP" step="0.01" value="' + esc(v['Prix bidon HT']) + '"></label>' +
-    '<label class="champ"><span>Livraison facturée (€ HT)</span><input type="number" id="cmL" step="0.01" value="' + esc(v['Livraison HT']) + '"></label></div>' +
-    '<label class="champ"><span>Notes</span><input type="text" id="cmN" value="' + esc(v.Notes) + '" placeholder="Facture, mode de paiement…"></label>' +
+    '<label class="champ"><span>Remise (€ HT)</span><input type="number" id="cmR" min="0" step="0.01" value="' + esc(Number(v['Remise HT']) || '') + '" placeholder="0"></label>' +
+    '<label class="champ"><span>Livraison facturée (€ HT)</span><input type="number" id="cmL" step="0.01" value="' + esc(offerte ? 0 : v['Livraison HT']) + '"' + (offerte ? ' disabled' : '') + '></label>' +
+    '<label class="interrupteur" style="display:flex;align-self:end;margin-bottom:10px"><input type="checkbox" id="cmOff"' + (offerte ? ' checked' : '') + '><i></i>Livraison offerte</label></div>' +
+    '<label class="champ"><span>Notes</span><input type="text" id="cmN" value="' + esc(v.Notes) + '" placeholder="Geste commercial, facture, mode de paiement…"></label>' +
     '<div class="total-cmd" id="cmTotal"></div>' +
     (x ? '<label class="interrupteur" style="display:flex;margin-top:12px"><input type="checkbox" id="cmPaye"' + (x['Payée le'] ? ' checked' : '') + '><i></i>' +
       (x.TransactionID ? 'Payée : virement Qonto du ' + esc(fmtDate(x['Payée le'])) : 'Payée' + (x['Payée le'] ? ' le ' + esc(fmtDate(x['Payée le'])) : ' (espèces, chèque… ; les virements Qonto sont cochés tout seuls)')) + '</label>' : '') +
     (!x ? '<p class="pale petit" style="margin:8px 0 0">Le client passe en Won, sa date de rachat est recalculée et une tâche d’appel est créée à cette date.</p>' : ''),
-    pied: (x ? '<button class="btn danger gauche" id="cmSuppr">' + ico('poubelle') + 'Supprimer</button>' : '') + '<button class="btn" data-fermer>Annuler</button><button class="btn principal" id="cmOk">' + (x ? 'Enregistrer' : 'Enregistrer la vente') + '</button>' });
-  const total = () => {
-    const ht = (Number(f.$('#cmB').value) || 0) * (Number(f.$('#cmP').value) || 0) + (Number(f.$('#cmL').value) || 0);
-    f.$('#cmTotal').innerHTML = '<span>Total</span><b>' + euros(ht, 2) + ' HT</b><span class="pale">' + euros(ht * (1 + (Number(r.TVA) || 0) / 100), 2) + ' TTC</span>';
-  };
-  ['#cmB', '#cmP', '#cmL'].forEach(k => f.$(k).oninput = total);
-  total();
+    pied: (x ? '<button class="btn danger gauche" id="cmSuppr">' + ico('poubelle') + 'Supprimer</button>' : '') + '<button class="btn" data-fermer>Annuler</button><button class="btn principal" id="cmOk">' +
+      (x ? 'Enregistrer' : essai ? 'Enregistrer l’essai' : 'Enregistrer la vente') + '</button>' });
+  const val = k => f.$(k) ? f.$(k).value : '';
+  if (!essai) {
+    const total = () => {
+      const brut = (Number(val('#cmB')) || 0) * (Number(val('#cmP')) || 0), remise = Number(val('#cmR')) || 0, liv = f.$('#cmOff').checked ? 0 : Number(val('#cmL')) || 0;
+      const ht = brut - remise + liv;
+      f.$('#cmTotal').innerHTML = '<span>Total' + (remise ? ' <small class="pale">(remise −' + euros(remise, 2) + ')</small>' : '') + (f.$('#cmOff').checked ? ' <small class="pale">· livraison offerte</small>' : '') + '</span><b>' + euros(ht, 2) + ' HT</b><span class="pale">' + euros(ht * (1 + (Number(r.TVA) || 0) / 100), 2) + ' TTC</span>';
+    };
+    ['#cmB', '#cmP', '#cmL', '#cmR'].forEach(k => f.$(k).oninput = total);
+    f.$('#cmOff').onchange = () => {
+      const l = f.$('#cmL');
+      if (f.$('#cmOff').checked) { l.dataset.avant = l.value; l.value = 0; l.disabled = true; }
+      else { l.disabled = false; l.value = Number(l.dataset.avant) > 0 ? l.dataset.avant : r.LIVRAISON_CLIENT_HT; }
+      total();
+    };
+    total();
+  }
   f.$('#cmOk').onclick = () => {
-    const o = { bidons: f.$('#cmB').value, prix: f.$('#cmP').value, livraison: f.$('#cmL').value, date: new Date(f.$('#cmD').value + 'T12:00').toISOString(), notes: f.$('#cmN').value.trim() };
-    const paye = x && f.$('#cmPaye').checked;
-    if (x) return occupe(f.$('#cmOk'), appel('crmModifierCommande', x.ID, Object.assign({ date: o.date, Bidons: o.bidons, 'Prix bidon HT': o.prix, 'Livraison HT': o.livraison, Notes: o.notes },
-      paye !== !!x['Payée le'] ? { payee: paye } : {})))
+    const livraison = essai ? 0 : f.$('#cmOff').checked ? 0 : val('#cmL');
+    const o = { bidons: val('#cmB'), prix: essai ? 0 : val('#cmP'), livraison, remise: essai ? 0 : Number(val('#cmR')) || 0,
+      date: new Date(val('#cmD') + 'T12:00').toISOString(), notes: val('#cmN').trim() };
+    if (!(Number(o.bidons) >= 1)) return toast('Indiquez le nombre de bidons', true);
+    const paye = x && !essai && f.$('#cmPaye').checked;
+    if (x) return occupe(f.$('#cmOk'), appel('crmModifierCommande', x.ID, Object.assign({ date: o.date, Bidons: o.bidons, Notes: o.notes },
+      essai ? {} : { 'Prix bidon HT': o.prix, 'Livraison HT': o.livraison, 'Remise HT': o.remise }, paye !== !!x['Payée le'] && !essai ? { payee: paye } : {})))
       .then(y => { remplacer(S.d.commandes, y); if (!y.TransactionID) S.d.banque.forEach(b => { if (b.CommandeID === y.ID) { b.CommandeID = ''; b.Statut = 'À rapprocher'; } }); f.fermer(); afficher(); toast('Commande modifiée'); });
-    occupe(f.$('#cmOk'), appel('crmCommande', Object.assign({ clientId: c.ID, auteur: S.moi }, o)))
-      .then(y => { majClient(y); f.fermer(); afficher(); toast(type + ' enregistrée 🎉'); });
+    occupe(f.$('#cmOk'), appel('crmCommande', Object.assign({ clientId: c.ID, auteur: S.moi, essai: !!essai }, o)))
+      .then(y => { majClient(y); f.fermer(); afficher(); toast(essai ? 'Bidon d’essai enregistré · rappel dans 7 jours' : type + ' enregistrée 🎉'); });
   };
   if (x) f.$('#cmSuppr').onclick = () => confirmer('Supprimer cette commande ?', 'Elle ne comptera plus dans les ventes ni dans le stock.', 'Supprimer').then(ok => ok &&
     (S.d.commandes = S.d.commandes.filter(y => y.ID !== x.ID), f.fermer(), afficher(), toast('Commande supprimée'), enFond(appel('crmSupprimerCommande', x.ID))));
@@ -4069,7 +4140,7 @@ function soldeAu(date) {
 /** Carte « À rapprocher » + impayés (page Stock & compta). */
 function carteBanque() {
   const q = S.d.qonto || {};
-  const impayees = S.d.commandes.filter(x => !x['Payée le']).sort((a, b) => String(a.Date).localeCompare(String(b.Date)));
+  const impayees = S.d.commandes.filter(x => !x['Payée le'] && !estEssai(x) && montantTTC(x) > 0).sort((a, b) => String(a.Date).localeCompare(String(b.Date)));
   const aRapprocher = S.d.banque.filter(b => b.Sens === 'Crédit' && b.Statut === 'À rapprocher').sort((a, b) => String(b.Date).localeCompare(String(a.Date)));
   const options = '<option value="">Associer à une commande…</option>' + impayees.map(x => '<option value="' + x.ID + '">' + esc(nomClient(client(x.ClientID))) + ' · ' + esc(fmtDate(x.Date)) + ' · ' + euros(montantTTC(x), 2) + ' TTC</option>').join('');
   const totalImpaye = impayees.reduce((t, x) => t + montantTTC(x), 0);
@@ -4133,7 +4204,7 @@ function economie() {
 
 /** Churn mesuré : à chaque date de rachat, le client recommande (rachat) ou part (Lost avec au moins une commande). */
 function churnReel() {
-  const clientsCmd = new Set(S.d.commandes.map(x => x.ClientID));
+  const clientsCmd = new Set(S.d.commandes.filter(x => !estEssai(x)).map(x => x.ClientID));
   const perdus = S.d.clients.filter(c => c.Tag === 'Lost' && clientsCmd.has(c.ID)).length;
   const rachats = S.d.commandes.filter(x => x.Type === 'Rachat').length;
   const echeances = perdus + rachats, f = R('COMMANDES_PAR_AN') || 2.5;
@@ -4176,11 +4247,17 @@ const horsCompte = x => String(x.Notes || '').startsWith(HORS_COMPTE);
 /** Ventes réelles d'une période (option : seulement les clients d'un owner). `toutes` : y compris celles qui ne comptent pas. */
 function ventesEntre(de, a, owner, toutes) {
   return S.d.commandes.filter(x => {
-    if (!toutes && horsCompte(x)) return false;
+    if (estEssai(x) || (!toutes && horsCompte(x))) return false;
     const d = new Date(x.Date);
     if (d < de || d >= a) return false;
     return !owner || (client(x.ClientID) || {}).Owner === owner;
   });
+}
+/** Bidons d'essai offerts sur une période (option : clients d'un owner) et leur coût (bidons au prix de revient + envois). */
+function essaisEntre(de, a, owner) {
+  const liste = S.d.commandes.filter(x => estEssai(x) && new Date(x.Date) >= de && new Date(x.Date) < a && (!owner || (client(x.ClientID) || {}).Owner === owner));
+  const bidons = liste.reduce((t, x) => t + (Number(x.Bidons) || 0), 0);
+  return { n: liste.length, bidons, cout: bidons * economie().coutReel + liste.length * R('COUT_ENVOI_HT') };
 }
 /** Les ventes d'une période, une par ligne, avec leur client : « Ne compte pas » (doublon…) ou « Supprimer ». */
 function fenetreVentes(de, a, qui) {
@@ -4290,7 +4367,8 @@ function pageObjectifs() {
   const box = boxActive(st.debutBox, debutM) ? R('BOX_MOIS_HT') * part : 0;
   const objNet = obj.ventes * e.netVente(cout) - box;
   const reel = bilan(ventesEntre(deP, finM, qui), e.coutReel);
-  const net = reel.net - box;
+  const essais = essaisEntre(deP, finM, qui);
+  const net = reel.net - box - essais.cout; // les bidons d'essai offerts coûtent
   const auj = new Date();
   const enCours = auj >= deP && auj < finM, passe = auj >= finM;
   const ecoules = joursOuvres(deP, enCours ? new Date(auj.getFullYear(), auj.getMonth(), auj.getDate() + 1) : passe ? finM : deP), total = joursOuvres(deP, finM);
@@ -4312,7 +4390,7 @@ function pageObjectifs() {
     d = fin;
   }
   const churn = churnReel();
-  const cumulReel = S.d.commandes.filter(x => x.Type !== 'Rachat' && !horsCompte(x) && new Date(x.Date) < finM && (!qui || (client(x.ClientID) || {}).Owner === qui)).length;
+  const cumulReel = S.d.commandes.filter(x => x.Type !== 'Rachat' && !estEssai(x) && !horsCompte(x) && new Date(x.Date) < finM && (!qui || (client(x.ClientID) || {}).Owner === qui)).length;
 
   $('#page').innerHTML = '<div class="page objectifs">' +
     '<div class="entete"><div><h1>Objectifs</h1><p>Un client passé en Won = une vente. Les rachats sont estimés à ' + esc(String(R('COMMANDES_PAR_AN')).replace('.', ',')) + ' commandes par client et par an.</p></div>' +
@@ -4328,7 +4406,8 @@ function pageObjectifs() {
           (reel.ventes > obj.ventes && obj.ventes ? '<span class="vert">' + ico('tendance') + '+' + (reel.ventes - obj.ventes) + ' au-dessus de l’objectif</span>' : '') + '</div></div>' +
       '<div class="carte kpi"><div class="kpi-tete"><span class="etiquette">Net du mois</span><span class="pct ' + (pct(net, objNet) >= 100 ? 'ok' : '') + '">' + (objNet > 0 ? pctTxt(net, objNet) : '—') + '</span></div>' +
         '<div class="kpi-chiffre"><b>' + euros(net) + '</b><span>/ ' + euros(objNet) + '</span></div>' + barre(Math.max(net, 0), objNet) +
-        '<div class="kpi-detail"><span>CA <b>' + euros(reel.ca) + '</b> HT</span><span>Marge / vente <b>' + euros(e.netVente(cout)) + '</b></span>' + (box ? '<span>Box −' + euros(box) + '</span>' : '') + '</div></div>' +
+        '<div class="kpi-detail"><span>CA <b>' + euros(reel.ca) + '</b> HT</span><span>Marge / vente <b>' + euros(e.netVente(cout)) + '</b></span>' + (box ? '<span>Box −' + euros(box) + '</span>' : '') +
+          (essais.n ? '<span title="Bidons d’essai offerts ce mois-ci (bidons au prix de revient + envois)">' + ico('cadeau') + 'Essais ' + essais.bidons + ' bidon' + (essais.bidons > 1 ? 's' : '') + ' −' + euros(essais.cout) + '</span>' : '') + '</div></div>' +
       '<div class="carte kpi"><div class="kpi-tete"><span class="etiquette">Projection fin de mois</span><span class="pct ' + (pct(projection, obj.ventes) >= 100 ? 'ok' : '') + '">' + pctTxt(projection, obj.ventes) + '</span></div>' +
         '<div class="kpi-chiffre"><b>' + projection + '</b><span>ventes</span></div>' + barre(projection, obj.ventes) +
         '<div class="kpi-detail"><span>' + (enCours ? ecoules + ' / ' + total + ' jours ouvrés' : passe ? 'Mois terminé' : 'Mois à venir') + '</span>' +
