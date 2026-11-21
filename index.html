@@ -621,6 +621,8 @@
   /* Fiche : coordonnées doubles, commandes */
   .double-ligne { display: flex; align-items: center; gap: 6px; }
   .double-ligne input { flex: 1; min-width: 0; }
+  .bouton-sms { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: none; background: var(--acier-100); color: var(--ardoise-700); cursor: pointer; transition: all var(--vite); }
+  .bouton-sms:hover { background: var(--acier); color: #fff; } .bouton-sms svg.i { width: 15px; height: 15px; }
   .pastille-2 { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1px dashed var(--trait-fort); background: none; color: var(--pale); font-size: 12px; font-weight: 700; cursor: pointer; line-height: 1; transition: all var(--vite); }
   .pastille-2:hover { border-color: var(--acier); color: var(--ardoise-700); }
   .pastille-2.rempli { border-style: solid; background: var(--acier-100); color: var(--ardoise-700); border-color: transparent; }
@@ -749,7 +751,7 @@
 <script>
 // =================================================================== État, icônes, utilitaires
 const API = window.CRM_API || 'https://script.google.com/macros/s/AKfycbyi4wD91ajHJmD_goYeQZRiTgZgCQYApcerBk6cUuFYGVyEATy_SHLW0CKrnn9y20T1/exec'; // adresse de l'API Apps Script (remplie par build.py)
-const VERSION_APP = '2026.11.21-1535';
+const VERSION_APP = '2026.11.21-1603';
 const S = { d: null, page: 'clients', id: null, vue: 'tous', filtres: null, recherche: '', selection: new Set(), afficherFiltres: false,
   ongletFiche: 'infos', filtreActivite: 'Tout', tachesEquipe: false, tachesFaites: false, ongletEmails: 'recus', recusTraites: false, inscriptionsToutes: false, csv: null, brouillonSeq: null };
 
@@ -1968,9 +1970,11 @@ function pageFiche() {
   // Téléphone / e-mail : le principal s'affiche, le second se déplie d'un clic (et peut devenir le principal).
   const double = (k1, k2, type, libelle) => {
     const v2 = c[k2] || '';
-    return '<div class="prop prop-double"><span>' + libelle + '</span><div class="double-ligne"><input type="' + type + '" data-champ="' + esc(k1) + '" value="' + esc(type === 'tel' ? telAffiche(c[k1]) : c[k1] || '') + '" placeholder="—">' +
+    // Téléphone : petit bouton SMS → Messages s'ouvre sur ce numéro (sur la conversation du contact s'il est déjà enregistré)
+    const sms = k => type === 'tel' && telNettoye(c[k]) ? '<button type="button" class="bouton-sms" data-sms-direct="' + esc(telNettoye(c[k])) + '" title="Envoyer un SMS à ce numéro" aria-label="Envoyer un SMS">' + ico('sms') + '</button>' : '';
+    return '<div class="prop prop-double"><span>' + libelle + '</span><div class="double-ligne"><input type="' + type + '" data-champ="' + esc(k1) + '" value="' + esc(type === 'tel' ? telAffiche(c[k1]) : c[k1] || '') + '" placeholder="—">' + sms(k1) +
       '<button type="button" class="pastille-2' + (v2 ? ' rempli' : '') + '" data-deplier="' + esc(k2) + '" title="' + (v2 ? 'Voir le 2e' : 'Ajouter un 2e') + '">' + (v2 ? '2' : '+') + '</button></div>' +
-      '<div class="double-second" data-second="' + esc(k2) + '"' + (S.deplies && S.deplies[k2] ? '' : ' hidden') + '><input type="' + type + '" data-champ="' + esc(k2) + '" value="' + esc(type === 'tel' ? telAffiche(v2) : v2) + '" placeholder="2e ' + libelle.toLowerCase() + '">' +
+      '<div class="double-second" data-second="' + esc(k2) + '"' + (S.deplies && S.deplies[k2] ? '' : ' hidden') + '><input type="' + type + '" data-champ="' + esc(k2) + '" value="' + esc(type === 'tel' ? telAffiche(v2) : v2) + '" placeholder="2e ' + libelle.toLowerCase() + '">' + sms(k2) +
       (v2 ? '<button type="button" class="btn mini fantome" data-principal="' + esc(k1) + '|' + esc(k2) + '" title="Utiliser comme principal">' + ico('etoile') + 'Principal</button>' : '') + '</div></div>';
   };
   const section = (titre, contenu, ouvert) => '<details' + (ouvert ? ' open' : '') + '><summary>' + titre + ico('bas') + '</summary><div class="contenu">' + contenu + '</div></details>';
@@ -2082,6 +2086,7 @@ function pageFiche() {
   $('#ajoutChamp').onclick = () => demanderTexte('Nouveau champ', 'Nom du champ (visible sur toutes les fiches)', 'Ex. : Nombre d’adhérents').then(nom =>
     appel('crmAjouterChamp', nom).then(ch => { S.d.champs = ch; pageFiche(); toast('Champ « ' + nom + ' » ajouté'); }));
   $('#fusionAvec').onclick = () => fenetreChoixFusion(c);
+  $$('[data-sms-direct]').forEach(b => b.onclick = () => { location.href = 'sms:' + b.dataset.smsDirect; });
   $('#suppr').onclick = () => confirmer('Supprimer ' + esc(nomClient(c)) + ' ?', 'La fiche sera supprimée du CRM (sa séquence éventuelle est arrêtée). Cette action est définitive.', 'Supprimer')
     .then(ok => { if (!ok) return; S.d.clients = S.d.clients.filter(x => x.ID !== c.ID); aller('clients'); toast('Fiche supprimée'); enFond(appel('crmSupprimerClient', c.ID)); });
   const arret = $('#arretSeq');
